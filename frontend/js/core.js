@@ -77,7 +77,7 @@
       for (let j = 0; j < len; j++) { const v = hours[i + j].aqi; if (typeof v !== 'number') { ok = false; break; } sum += v; }
       if (!ok) continue;
       const avg = sum / len;
-      if (!best || avg < best.avg) best = { start: hours[i].time, end: hours[i + len - 1].time, avg: Math.round(avg), index: i };
+      if (!best || avg < best.avg) best = { start: hours[i].time, end: plusHour(hours[i + len - 1].time), avg: Math.round(avg), index: i };
     }
     return best;
   }
@@ -117,7 +117,7 @@
   function buildPrompt(q,ctx){
     const b=band(ctx.aqi),w=ctx.window,wx=ctx.wx||{};
     return 'You are Svasa, an air-quality assistant. Reply in '+(LANGS[ctx.lang]||'English')+'. Answer ONLY using the data below. Be concise (max 90 words), practical, plain language. '+
-    'Never diagnose. For severe symptoms say to seek medical care. If the question is not about air, health or outdoor planning, say you can only help with air quality.\n'+
+    'Never diagnose. For severe symptoms say to seek medical care. If the question is not about air, health or outdoor planning, reply with exactly the single word OFFTOPIC and nothing else.\n'+
     'DATA: city='+ctx.city+'; US AQI='+Math.round(ctx.aqi)+' ('+b.label+'); main pollutant='+(ctx.dominant?POLLUTANTS[ctx.dominant].name:'unknown')+
     '; trend next hours='+ctx.trend+'; cleanest 2h window='+(w?w.start.slice(11,16)+'-'+w.end.slice(11,16)+' AQI~'+w.avg:'n/a')+
     '; temp='+(wx.t!=null?wx.t+'C':'n/a')+'; humidity='+(wx.h!=null?wx.h+'%':'n/a')+'; wind='+(wx.w!=null?wx.w+' km/h':'n/a')+
@@ -170,7 +170,7 @@
     let best=null;
     for(let i=0;i+len<=hrs.length;i++){let s=0,ok=true;
       for(let j=0;j<len;j++){const x=hrs[i+j],h=+x.time.slice(11,13);if(typeof x.aqi!=='number'||h<from||h>=to){ok=false;break}s+=x.aqi}
-      if(ok){const avg=s/len;if(!best||avg<best.avg)best={start:hrs[i].time,end:hrs[i+len-1].time,avg:Math.round(avg),index:i}}}
+      if(ok){const avg=s/len;if(!best||avg<best.avg)best={start:hrs[i].time,end:plusHour(hrs[i+len-1].time),avg:Math.round(avg),index:i}}}
     if(!best)return null;
     let now=0,k=0;for(let i=0;i<len&&i<hrs.length;i++){if(typeof hrs[i].aqi==='number'){now+=hrs[i].aqi;k++}}
     now=k?Math.round(now/k):hrs[0].aqi;
@@ -211,6 +211,15 @@
     }
     return answerBase(q,ctx);
   }
-  const api = { indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
+
+  function plusHour(t){const d=Date.parse(t+'Z');return isFinite(d)?new Date(d+3600000).toISOString().slice(0,16):t}
+  function isOffTopic(t){return /^\s*OFFTOPIC\b/i.test(t||'')}
+  function lastDays(days,today,n){return Array.isArray(days)?days.filter(d=>d.date<=today).slice(-n):[]}
+  function trailingAvg(data,key,until,n){
+    if(!data||!data.hourly||!Array.isArray(data.hourly.time)||!Array.isArray(data.hourly[key]))return null;
+    const v=[];for(let i=0;i<data.hourly.time.length;i++){if(data.hourly.time[i]<=until&&typeof data.hourly[key][i]==='number')v.push(data.hourly[key][i])}
+    const s=v.slice(-n);return s.length?s.reduce((a,b)=>a+b,0)/s.length:null;
+  }
+  const api = { isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Svasa = api;
 })(typeof window !== 'undefined' ? window : globalThis);

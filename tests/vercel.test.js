@@ -4,6 +4,8 @@ const h=require('../api/ask.js');
 const call=(o)=>new Promise(r=>{const res={headers:{},setHeader(k,v){this.headers[k]=v},status(c){this.code=c;return this},json(b){r({code:this.code,b})}};h(Object.assign({method:'POST',headers:{'content-type':'application/json',host:'x.vercel.app'},socket:{remoteAddress:'1.1.1.'+Math.floor(Math.random()*250)}},o),res)});
 (async()=>{const ctx={aqi:160,city:'Delhi',profile:'general',trend:'rising'};
  let r=await call({body:{q:'mask?',ctx}});assert.equal(r.code,200);assert.match(r.b.answer,/Wear N95/);assert.match(r.b.answer,/Data used/);
+ global.fetch=async()=>({ok:true,json:async()=>({candidates:[{content:{parts:[{text:'OFFTOPIC'}]}}]})});
+ r=await call({body:{q:'write a poem',ctx}});assert.equal(r.code,200);assert.ok(!/Data used/.test(r.b.answer));assert.equal(r.b.source,'offtopic');
  assert.equal((await call({method:'GET'})).code,405);
  assert.equal((await call({headers:{'content-type':'application/json',host:'x.vercel.app',origin:'https://evil.example'},body:{q:'x',ctx}})).code,403);
  assert.equal((await call({headers:{'content-type':'text/plain',host:'x.vercel.app'},body:{}})).code,415);

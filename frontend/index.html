@@ -26,6 +26,7 @@
 
   <div class="main">
     <header class="top">
+      <div class="citypill" id="city" aria-live="polite"></div>
       <form id="f" class="search" role="search" autocomplete="off">
         <input id="q" type="search" placeholder="Search any city" aria-label="Search city" maxlength="80">
         <div id="sugg" hidden></div>
@@ -37,7 +38,11 @@
 
     <main id="content">
       <section id="v-today" class="view">
-        <div class="hero card" id="hero"></div>
+        <div class="hero card" id="hero"><div class="skel" aria-busy="true"></div></div>
+        <details class="card about"><summary>How to read these numbers</summary>
+          <p><b>US AQI</b> comes from the US EPA scale and is calculated from 24-hour averages of each pollutant. <b>India NAQI</b> uses the stricter-in-places Indian (CPCB) breakpoints, so the two scores can differ for the same air. Here NAQI is estimated from the 24-hour PM2.5 average and current readings of the other pollutants.</p>
+          <p>The pollutant concentrations below are <b>current hourly readings</b>, so they can look higher or lower than the AQI, which smooths over the day.</p>
+          <p><b>Data source:</b> Open-Meteo / Copernicus CAMS atmospheric model. These are modelled estimates for a grid cell, not readings from a monitor on your street.</p></details>
         <div class="grid2">
           <div class="card"><h2>What to do now</h2><div class="tiles" id="adv"></div><div id="alert"></div></div>
           <div class="card"><h2>What is in the air</h2><div id="pol"></div><p class="foot">Compared with WHO 2021 24-hour guideline levels.</p></div>
@@ -71,10 +76,11 @@
       </section>
 
       <section id="v-ask" class="view" hidden>
-        <div class="card chat"><div class="cardhead"><h2>Ask Svasa</h2><div class="row"><span class="pill" id="aimode"></span><label class="sel"><span>Answer in</span><select id="lang" aria-label="Answer language"></select></label></div></div>
+        <div class="card chat"><div class="cardhead"><h2>Ask Svasa</h2><div class="row"><span class="pill brand" id="aimode"></span><label class="sel"><span>Answer in</span><select id="lang" aria-label="Answer language"></select></label></div></div>
           <div id="log" class="log" aria-live="polite"></div>
           <div class="chips" id="qs"></div>
-          <form id="af" class="askform"><input id="aq" type="text" maxlength="80" placeholder="Can I run outside today?" aria-label="Ask a question"><button class="btn">Send</button></form></div>
+          <form id="af" class="askform"><input id="aq" type="text" maxlength="80" placeholder="Can I run outside today?" aria-label="Ask a question"><button class="btn">Send</button></form>
+          <p class="foot" style="margin:0">Svasa gives general guidance, not medical advice.</p></div>
       </section>
     </main>
   </div>

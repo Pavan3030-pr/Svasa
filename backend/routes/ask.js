@@ -17,6 +17,8 @@ module.exports = async function ask(req) {
   inflight++;
   try {
     const r = await gemini.generate(q, ctx);
-    return r.error ? R(r.status, { error: r.error }) : R(200, { answer: r.text + '\n' + S.sources(ctx), source: 'gemini' });
+    if (r.error) return R(r.status, { error: r.error });
+    if (S.isOffTopic(r.text)) return R(200, { answer: 'I can only help with air quality, health and outdoor planning.', source: 'offtopic' });
+    return R(200, { answer: r.text + '\n' + S.sources(ctx), source: 'gemini' });
   } catch (e) { return R(502, { error: 'AI request failed' }); } finally { inflight--; }
 };

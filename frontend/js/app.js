@@ -28,7 +28,7 @@ function demo() {
   return { current: { time: day + 'T12:00', us_aqi: 132, pm2_5: 48.2, pm10: 90, nitrogen_dioxide: 38, ozone: 72, sulphur_dioxide: 12, carbon_monoxide: 610, us_aqi_pm2_5: 132, us_aqi_pm10: 70, us_aqi_nitrogen_dioxide: 30, us_aqi_ozone: 55, us_aqi_sulphur_dioxide: 8, us_aqi_carbon_monoxide: 7 }, hourly: { time, us_aqi: us, pm2_5: pm } };
 }
 async function load(p) {
-  st.place = p; $('v-today').classList.add('loading'); banner('');
+  st.place = p; $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
   try {
     const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5&forecast_days=2&past_days=7&timezone=auto`);
@@ -55,7 +55,7 @@ function render() {
   const root = document.documentElement.style; root.setProperty('--c', b.color); root.setProperty('--t', b.bg);
   st.ctx = { aqi, profile: st.profile, dominant: dom, window: win, trend: tr, city: st.place.name, wx: st.wx };
 
-  const ind = S.indiaAqi(c), wn = S.windNote(st.wx && st.wx.w, aqi);
+  const avgPm = S.trailingAvg(st.data, 'pm2_5', c.time, 24), ind = S.indiaAqi(avgPm == null ? c : Object.assign({}, c, { pm2_5: avgPm })), wn = S.windNote(st.wx && st.wx.w, aqi);
   const status = st.demo ? 'Sample data' : st.stale ? 'Offline snapshot' : 'Live';
   const trendLabel = { rising: '↗ Worsening', falling: '↘ Improving', steady: '→ Steady' }[tr];
   $('hero').innerHTML =
@@ -65,6 +65,7 @@ function render() {
      <p class="lead">${esc(a.go)}${dom ? ' Main driver: ' + S.POLLUTANTS[dom].name + '.' : ''}${wn ? ' ' + esc(wn) : ''}</p>
      <div class="chips-row">
        <span class="chip2">${trendLabel}</span>
+       <span class="chip2" title="Modelled estimate from Open-Meteo / CAMS, not a street monitor">Modelled data · Open-Meteo</span>
        ${ind ? `<span class="chip2">India NAQI ${ind.aqi} · ${esc(ind.label)}</span>` : ''}
        ${win ? `<span class="chip2">Cleanest ${win.start.slice(11, 16)}–${win.end.slice(11, 16)}</span>` : ''}
        ${st.wx ? `<span class="chip2">${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h</span>` : ''}
@@ -91,15 +92,17 @@ function render() {
 }
 function drawChart(h, win) {
   if (!h.length) { $('chart').innerHTML = '<p class="muted">No hourly forecast available.</p>'; return; }
-  const W = Math.max(640, h.length * 26), H = 200, max = Math.max(150, ...h.map(x => x.aqi || 0));
+  const L = 34, W = Math.max(680, h.length * 26 + L + 8), H = 220, top = 18, base = H - 28;
+  const max = Math.max(150, ...h.map(x => x.aqi || 0)), Y = v => base - v / max * (base - top);
+  const grid = [50, 100, 150, 200, 300].filter(v => v <= max).map(v => `<line x1="${L}" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e4e8eb"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`).join('');
   const bars = h.map((x, i) => {
-    const v = x.aqi || 0, bh = Math.max(3, v / max * (H - 44)), bb = S.band(v), inw = win && i >= win.index && i < win.index + 2;
-    return `<g><title>${x.time.slice(11, 16)} · AQI ${v}</title><rect x="${i * 26 + 4}" y="${H - 26 - bh}" width="20" height="${bh}" rx="5" fill="${bb.color}"${inw ? ' stroke="#0f1f23" stroke-width="2.5"' : ''}/>${i % 3 === 0 ? `<text x="${i * 26 + 14}" y="${H - 8}" text-anchor="middle">${x.time.slice(11, 13)}</text>` : ''}</g>`;
+    const v = x.aqi || 0, bb = S.band(v), inw = win && i >= win.index && i < win.index + 2, cx = L + i * 26 + 14, y = Y(v);
+    return `<g><title>${x.time.slice(11, 16)} · AQI ${v}</title><rect x="${L + i * 26 + 4}" y="${y}" width="20" height="${Math.max(2, base - y)}" rx="5" fill="${bb.color}"${inw ? ' stroke="#0f1f23" stroke-width="2.5"' : ''}/><text class="v" x="${cx}" y="${y - 4}" text-anchor="middle">${Math.round(v)}</text>${i % 3 === 0 ? `<text x="${cx}" y="${H - 10}" text-anchor="middle">${x.time.slice(11, 13)}h</text>` : ''}</g>`;
   }).join('');
-  $('chart').innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Hourly AQI for the next 24 hours. Outlined bars mark the cleanest window.">${bars}</svg>` + legend();
+  $('chart').innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Hourly AQI for the next 24 hours with values. Outlined bars mark the cleanest window.">${grid}${bars}</svg>` + legend();
 }
 function drawHistory(c) {
-  const days = S.dailyAvg(st.data).slice(-8), ins = S.insights(days), vw = S.vsWeek(days, c.time.slice(0, 10));
+  const days = S.lastDays(S.dailyAvg(st.data), c.time.slice(0, 10), 7), ins = S.insights(days), vw = S.vsWeek(days, c.time.slice(0, 10));
   $('histtxt').textContent = ins ? `Best day ${ins.best.date} (AQI ${ins.best.avg}), worst ${ins.worst.date} (AQI ${ins.worst.avg}). ${ins.over} of ${days.length} days averaged above 100.` + (vw === null ? '' : ` Today is ${Math.abs(vw)}% ${vw >= 0 ? 'higher' : 'lower'} than the average of the previous days.`) : 'No history available.';
   const max = Math.max(150, ...days.map(x => x.avg));
   $('hist').innerHTML = `<svg width="${Math.max(480, days.length * 64)}" height="170" role="img" aria-label="Daily average AQI">` + days.map((d, i) => {
@@ -176,7 +179,7 @@ async function suggest(v) {
     s.onclick = e => { const b = e.target.closest('button'); if (b) pick(res[b.dataset.i]); };
   } catch (_) { s.hidden = true; }
 }
-function pick(x) { $('sugg').hidden = true; $('q').value = x.name; load({ name: x.name + (x.country ? ', ' + x.country : ''), lat: x.latitude, lon: x.longitude }); show('today'); }
+function pick(x) { $('sugg').hidden = true; $('q').value = ''; load({ name: x.name + (x.country ? ', ' + x.country : ''), lat: x.latitude, lon: x.longitude }); show('today'); }
 
 /* ---------- router ---------- */
 function show(v) {
@@ -192,6 +195,8 @@ $('nav').addEventListener('click', e => { const b = e.target.closest('button[dat
 $('profile').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('');
 $('profile').onchange = e => { st.profile = e.target.value; if (st.data) render(); };
 $('q').addEventListener('input', e => { clearTimeout(suggTimer); suggTimer = setTimeout(() => suggest(e.target.value), 250); });
+$('q').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { const b = $('sugg').querySelector('button'); if (b) { e.preventDefault(); b.focus(); } } if (e.key === 'Escape') $('sugg').hidden = true; });
+$('sugg').addEventListener('keydown', e => { const b = e.target.closest('button'); if (!b) return; if (e.key === 'ArrowDown' && b.nextElementSibling) { e.preventDefault(); b.nextElementSibling.focus(); } if (e.key === 'ArrowUp') { e.preventDefault(); (b.previousElementSibling || $('q')).focus(); } if (e.key === 'Escape') { $('sugg').hidden = true; $('q').focus(); } });
 $('f').addEventListener('submit', async e => {
   e.preventDefault(); const v = S.cleanQuery($('q').value); if (!v) return;
   try {
