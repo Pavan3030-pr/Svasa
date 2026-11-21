@@ -1,0 +1,1 @@
+{"name":"svasa","version":"2.0.0","private":true,"scripts":{"start":"node server.js","test":"node tests/test.js && node tests/server.test.js"},"engines":{"node":">=18"}}

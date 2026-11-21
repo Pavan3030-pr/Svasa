@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Svasa – Urban air quality assistant</title>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0d6b63"><meta name="description" content="Live air quality for any city, with plain-language advice for your health profile and the cleanest hours to go out.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"></head>
+<body>
+<a class="skip" href="#main">Skip to air quality</a>
+<header>
+  <div class="brand"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="16" fill="#0d6b63"/><path d="M8 14q6-5 12 0t6 0M8 19q6-5 12 0t6 0M8 24q6-5 12 0t6 0" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg><div>Svasa<small>Urban air quality assistant</small></div></div>
+  <form class="search" id="f" role="search" autocomplete="off">
+    <input type="search" id="q" aria-label="Search city" placeholder="Search a city, e.g. Delhi, Lahore, London" maxlength="80">
+    <button>Check air</button><button type="button" class="ghost" id="loc" title="Use my location">Near me</button>
+    <div id="sugg" hidden></div>
+  </form>
+</header>
+<main id="main" aria-live="polite">
+  <div class="chips" role="group" aria-label="Health profile" id="chips"></div>
+  <div class="meta" id="live" aria-live="off"></div><div id="err" class="err" hidden></div>
+  <section class="card hero" id="hero" aria-label="Current air quality"></section>
+  <section class="card" aria-labelledby="h-adv"><h2 id="h-adv" style="font-size:22px;margin-bottom:12px">What to do today</h2><div class="grid" id="adv"></div><div id="alert"></div></section>
+  <section class="card" aria-labelledby="h-day"><h2 id="h-day" style="font-size:22px">Next 24 hours</h2><p class="meta" id="win"></p><div id="chart" style="overflow-x:auto"></div></section>
+  <section class="card" aria-labelledby="h-pol"><h2 id="h-pol" style="font-size:22px;margin-bottom:6px">What is in the air</h2><div id="pol"></div><p class="meta">Comparison uses the WHO 2021 24-hour guideline levels.</p></section>
+  <section class="card ask" aria-labelledby="h-ask"><h2 id="h-ask" style="font-size:22px">Ask Svasa</h2>
+    <div class="chips" id="qs"></div>
+    <form id="af"><input type="search" id="aq" aria-label="Ask a question" placeholder="Can I run outside? Do I need a mask?" maxlength="80"><button>Ask</button></form>
+    <div class="chips"><span class="meta" id="aimode"></span><label class="meta" for="lang">Answer in</label><select id="lang" style="padding:6px;border-radius:8px;border:1.5px solid var(--line);font:inherit"></select></div><div class="reply" id="reply" role="status">Pick a question or type your own.</div></section>
+  <section class="card" aria-labelledby="h-hist"><h2 id="h-hist" style="font-size:22px">Last 7 days</h2><p class="meta" id="histtxt"></p><div id="hist" style="overflow-x:auto"></div></section>
+<section class="card" aria-labelledby="h-plan"><h2 id="h-plan" style="font-size:22px">Plan a commute or workout</h2><div class="chips"><label for="dur" class="meta" style="align-self:center">Duration</label><select id="dur" style="padding:9px;border-radius:10px;border:1.5px solid var(--line);font:inherit"><option value="1">1 hour</option><option value="2" selected>2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select><label for="from" class="meta" style="align-self:center">Between</label><select id="from" style="padding:9px;border-radius:10px;border:1.5px solid var(--line);font:inherit"></select><label for="to" class="meta" style="align-self:center">and</label><select id="to" style="padding:9px;border-radius:10px;border:1.5px solid var(--line);font:inherit"></select><button type="button" id="plan">Find best time</button></div><p class="reply" id="planout" style="margin-top:12px" role="status">Choose a duration to find the cleanest start time in the next 24 hours.</p></section>
+<section class="card" aria-labelledby="h-cmp"><h2 id="h-cmp" style="font-size:22px">Compare cities</h2><p class="meta">Add the current city, then search and add more. Cleanest first.</p><div class="chips"><button type="button" class="ghost" id="addc">Add current city</button><button type="button" class="ghost" id="clrc">Clear</button></div><div id="cmp" style="margin-top:12px"></div></section>
+<div class="chips"><button class="ghost" id="share">Copy summary</button><button class="ghost" id="notif">Turn on alerts</button><select id="thr" aria-label="Alert level" style="padding:9px;border-radius:10px;border:1.5px solid var(--line);font:inherit"><option value="1">Alert from Moderate</option><option value="2" selected>Alert from Sensitive level</option><option value="3">Alert from Unhealthy</option></select><button class="ghost" id="inst" hidden>Install app</button></div>
+</main>
+<footer>Data: Open-Meteo / Copernicus CAMS model estimates (US AQI), not a ground monitor reading. General guidance only, not medical advice.</footer>
+<script src="core.js"></script>
+<script src="app.js" defer></script></body></html>
