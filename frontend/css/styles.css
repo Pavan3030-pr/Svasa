@@ -88,3 +88,14 @@ svg text{font:11.5px 'Plus Jakarta Sans',sans-serif;fill:var(--mute)}
 svg text.v{font-size:9.5px}
 input:focus-visible{outline-offset:0}
 @media(max-width:900px){.citypill{max-width:none}}
+
+@property --p{syntax:'<number>';inherits:false;initial-value:0}
+.ring{transition:--p .9s cubic-bezier(.2,.8,.2,1)}
+.verdict{display:inline-block;margin:0 0 10px;padding:6px 14px;border-radius:999px;background:#fff;border:2px solid var(--c);font-weight:800;font-size:14px}
+.strip{display:flex;gap:8px;padding-bottom:4px}
+.hr{flex:none;min-width:58px;display:grid;justify-items:center;gap:6px;padding:10px 8px;border-radius:14px;background:var(--bg);font-size:12.5px;color:var(--mute);font-weight:600}
+.hr i{width:14px;height:14px;border-radius:50%;display:block}.hr b{font-size:15px;color:var(--ink)}
+.tip{position:fixed;z-index:60;pointer-events:none;background:#0f1f23;color:#fff;padding:9px 12px;border-radius:10px;font-size:12.5px;max-width:230px;box-shadow:var(--sh);line-height:1.45}
+.onb{background:linear-gradient(120deg,#e2f2f0,#fff 80%)}
+.drv{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:14px}
+.drv div{padding:12px 14px;border-radius:14px;background:var(--bg)}.drv small{display:block;color:var(--mute);font-weight:700;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em}.drv b{font-size:18px}

@@ -117,7 +117,7 @@
   function buildPrompt(q,ctx){
     const b=band(ctx.aqi),w=ctx.window,wx=ctx.wx||{};
     return 'You are Svasa, an air-quality assistant. Reply in '+(LANGS[ctx.lang]||'English')+'. Answer ONLY using the data below. Be concise (max 90 words), practical, plain language. '+
-    'Never diagnose. For severe symptoms say to seek medical care. If the question is not about air, health or outdoor planning, reply with exactly the single word OFFTOPIC and nothing else.\n'+
+    'Never diagnose. For severe symptoms say to seek medical care. Questions about how air quality affects daily life are in scope: health, exercise, children, elderly people, pets, plants, laundry, commuting, cooking, sleep, windows, masks, purifiers and travel. Only if the request is clearly unrelated (poems, code, news, maths), reply with exactly the single word OFFTOPIC and nothing else.\n'+
     'DATA: city='+ctx.city+'; US AQI='+Math.round(ctx.aqi)+' ('+b.label+'); main pollutant='+(ctx.dominant?POLLUTANTS[ctx.dominant].name:'unknown')+
     '; trend next hours='+ctx.trend+'; cleanest 2h window='+(w?w.start.slice(11,16)+'-'+w.end.slice(11,16)+' AQI~'+w.avg:'n/a')+
     '; temp='+(wx.t!=null?wx.t+'C':'n/a')+'; humidity='+(wx.h!=null?wx.h+'%':'n/a')+'; wind='+(wx.w!=null?wx.w+' km/h':'n/a')+
@@ -145,13 +145,24 @@
     const s=days.slice().sort((a,b)=>a.avg-b.avg);
     return {best:s[0],worst:s[s.length-1],over:days.filter(x=>x.avg>100).length};
   }
-  function safety(q){
-    return /(chest (pain|pressure|(is |feels )?(tight|heavy))|can'?t (breathe|catch my breath)|cannot breathe|(struggling|trouble|difficulty) (to )?breath|gasping|short(ness)? of breath|blue lips|faint|unconscious|passing out|heart (racing|pounding)|suicid|self.harm|kill myself|सांस (नहीं|लेने)|सीने में दर्द|ఊపిరి|ఛాతి నొప్పి|ఛాతీ నొప్పి)/i.test(String(q||''))
-      ?'This may be urgent. Please contact local emergency services or a doctor now. I cannot assess symptoms. In India, call 112.':null;
+  const EMERG={en:'This may be urgent. Please contact local emergency services or a doctor now. I cannot assess symptoms. In India, call 112.',
+    hi:'यह आपात स्थिति हो सकती है। कृपया अभी स्थानीय आपातकालीन सेवा या डॉक्टर से संपर्क करें। मैं लक्षणों की जांच नहीं कर सकता। भारत में 112 पर कॉल करें।',
+    te:'ఇది అత్యవసర పరిస్థితి కావచ్చు. దయచేసి వెంటనే స్థానిక అత్యవసర సేవలను లేదా డాక్టర్‌ను సంప్రదించండి. నేను లక్షణాలను అంచనా వేయలేను. భారతదేశంలో 112కు కాల్ చేయండి.',
+    ta:'இது அவசர நிலையாக இருக்கலாம். உடனடியாக உள்ளூர் அவசர சேவை அல்லது மருத்துவரைத் தொடர்பு கொள்ளுங்கள். என்னால் அறிகுறிகளை மதிப்பிட முடியாது. இந்தியாவில் 112 ஐ அழைக்கவும்.',
+    bn:'এটি জরুরি অবস্থা হতে পারে। অনুগ্রহ করে এখনই স্থানীয় জরুরি পরিষেবা বা ডাক্তারের সঙ্গে যোগাযোগ করুন। আমি উপসর্গ মূল্যায়ন করতে পারি না। ভারতে ১১২ নম্বরে কল করুন।'};
+  function scriptLang(q){return /[\u0900-\u097F]/.test(q)?'hi':/[\u0C00-\u0C7F]/.test(q)?'te':/[\u0B80-\u0BFF]/.test(q)?'ta':/[\u0980-\u09FF]/.test(q)?'bn':null}
+  function safety(q,lang){
+    const s=String(q||'');
+    return /(chest (pain|pressure|(is |feels )?(tight|heavy))|can'?t (breathe|catch my breath)|cannot breathe|(struggling|trouble|difficulty) (to )?breath|gasping|short(ness)? of breath|blue lips|faint|unconscious|passing out|heart (racing|pounding)|suicid|self.harm|kill myself|सांस (नहीं|लेने)|सीने में दर्द|ఊపిరి|ఛాతి నొప్పి|ఛాతీ నొప్పి|மூச்சு|நெஞ்சு வலி|শ্বাস|বুকে ব্যথা)/i.test(s)?(EMERG[scriptLang(s)||lang]||EMERG.en):null;
   }
-  function sources(c){
-    const w=c.window;
-    return 'Data used: US AQI '+Math.round(c.aqi)+(c.dominant?', main pollutant '+POLLUTANTS[c.dominant].name:'')+', trend '+(c.trend||'n/a')+(w?', cleanest window '+w.start.slice(11,16)+'-'+w.end.slice(11,16):'')+'.';
+  const SRC={en:['Data used','main pollutant','trend','cleanest window',{rising:'rising',falling:'falling',steady:'steady'}],
+    hi:['उपयोग किया गया डेटा','मुख्य प्रदूषक','रुझान','सबसे साफ़ समय',{rising:'बढ़ रहा',falling:'घट रहा',steady:'स्थिर'}],
+    te:['ఉపయోగించిన డేటా','ప్రధాన కాలుష్యకారకం','ధోరణి','అత్యంత శుభ్రమైన సమయం',{rising:'పెరుగుతోంది',falling:'తగ్గుతోంది',steady:'స్థిరం'}],
+    ta:['பயன்படுத்திய தரவு','முக்கிய மாசுபடுத்தி','போக்கு','மிகத் தூய்மையான நேரம்',{rising:'அதிகரிக்கிறது',falling:'குறைகிறது',steady:'நிலையாக'}],
+    bn:['ব্যবহৃত তথ্য','প্রধান দূষক','প্রবণতা','সবচেয়ে পরিষ্কার সময়',{rising:'বাড়ছে',falling:'কমছে',steady:'স্থির'}]};
+  function sources(c,lang){
+    const L=SRC[lang]||SRC.en,w=c.window;
+    return L[0]+': US AQI '+Math.round(c.aqi)+(c.dominant?', '+L[1]+' '+POLLUTANTS[c.dominant].name:'')+', '+L[2]+' '+(L[4][c.trend]||'n/a')+(w?', '+L[3]+' '+w.start.slice(11,16)+'-'+w.end.slice(11,16):'')+'.';
   }
   function validateCtx(c){
     if(!c||typeof c!=='object'||typeof c.aqi!=='number'||!(c.aqi>=0&&c.aqi<=1000))return null;
@@ -204,6 +215,8 @@
     if(ctx&&ctx.aqi!=null){
       const lvl=effectiveLevel(ctx.aqi,ctx.profile),w=ctx.window,tm=w?' Cleanest hours: '+w.start.slice(11,16)+'-'+w.end.slice(11,16)+'.':'';
       if(/\b(pets?|dogs?|cats?)\b/.test(t))return lvl>=2?'Keep pets indoors as much as possible and shorten walks to the cleanest hours.'+tm:'Normal walks are fine for pets. Watch for coughing.';
+      if(/\bplants?\b|garden/.test(t))return 'Outdoor gardening is fine in light haze; limit it when AQI is high. Indoor plants do little for air quality compared with ventilation or a HEPA purifier.';
+      if(/laundry|clothes|drying/.test(t))return lvl>=2?'Dry clothes indoors or under cover today to keep pollutants off them.':'Outdoor drying is fine today.';
       if(/sleep|bedroom|night/.test(t))return lvl>=2?'Keep bedroom windows closed and run a purifier overnight if you have one.':'Air is fine. Ventilate the bedroom before bed.';
       if(/drive|car|commute|bike|scooter|two.?wheeler|bus\b/.test(t))return 'Use recirculate mode in the car and avoid peak traffic hours.'+(lvl>=3?' On a two-wheeler, wear an N95.':'')+tm;
       if(/cook|incense|candle|indoor|agarbatti/.test(t))return 'Use the exhaust fan while cooking and skip incense or candles when outdoor air is poor, since indoor sources add to PM2.5.';
@@ -220,6 +233,18 @@
     const v=[];for(let i=0;i<data.hourly.time.length;i++){if(data.hourly.time[i]<=until&&typeof data.hourly[key][i]==='number')v.push(data.hourly[key][i])}
     const s=v.slice(-n);return s.length?s.reduce((a,b)=>a+b,0)/s.length:null;
   }
-  const api = { isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
+
+  function dispersion(wx,aqi){
+    if(!wx||typeof wx.w!=='number')return null;
+    const w=wx.w,h=wx.h;let level=w<8?'Poor':w<20?'Fair':'Good';
+    let text=w<8?'Light wind lets pollutants build up near the ground.':w<20?'Moderate wind is mixing the air slowly.':'Strong wind is dispersing pollutants.';
+    if(typeof h==='number'&&h>=80)text+=' High humidity can add haze and make particles linger.';
+    return {level,text};
+  }
+  function verdict(aqi,p){
+    const l=effectiveLevel(aqi,p);
+    return l<0?'No data':l===0?'Good to go outside':l===1?'Fine for most outdoor plans':l===2?'Limit time outside':l===3?'Avoid outdoor exercise':'Stay indoors';
+  }
+  const api = { dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Svasa = api;
 })(typeof window !== 'undefined' ? window : globalThis);

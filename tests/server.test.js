@@ -6,7 +6,7 @@ mock.listen(0,()=>{process.env.GEMINI_BASE='http://127.0.0.1:'+mock.address().po
 const app=require('../backend/server.js');
 app.listen(0,async()=>{const B='http://127.0.0.1:'+app.address().port;
  const post=(o,raw)=>fetch(B+'/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:raw||JSON.stringify(o)});
- const ctx={aqi:160,city:'Delhi',profile:'asthma',dominant:'pm2_5',trend:'rising',window:{start:'2026-11-19T05:00',end:'2026-11-19T06:00',avg:90},wx:{t:20,h:50,w:5},lang:'hi'};
+ const ctx={aqi:160,city:'Delhi',profile:'asthma',dominant:'pm2_5',trend:'rising',window:{start:'2026-11-19T05:00',end:'2026-11-19T06:00',avg:90},wx:{t:20,h:50,w:5},lang:'en'};
  let r=await fetch(B+'/api/health');assert.equal((await r.json()).ai,true);console.log('ok - health');
  r=await fetch(B+'/');assert.equal(r.status,200);assert.ok(r.headers.get('content-security-policy'));console.log('ok - static + CSP');
  for(const p of ['/server.js','/../etc/passwd','/package.json','/tests/test.js']){r=await fetch(B+p);assert.equal(r.status,404)}console.log('ok - no source leakage');

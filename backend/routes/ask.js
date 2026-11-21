@@ -12,13 +12,13 @@ module.exports = async function ask(req) {
   if (!b || typeof b !== 'object') return R(400, { error: 'Invalid JSON' });
   const ctx = S.validateCtx(b.ctx), q = S.cleanQuery(b.q);
   if (!ctx || !q) return R(400, { error: 'Missing or invalid question or air data' });
-  const sf = S.safety(q); if (sf) return R(200, { answer: sf, source: 'safety' });
+  const sf = S.safety(q, ctx.lang); if (sf) return R(200, { answer: sf, source: 'safety' });
   if (inflight >= 20) return R(503, { error: 'Busy, try again' });
   inflight++;
   try {
     const r = await gemini.generate(q, ctx);
     if (r.error) return R(r.status, { error: r.error });
     if (S.isOffTopic(r.text)) return R(200, { answer: 'I can only help with air quality, health and outdoor planning.', source: 'offtopic' });
-    return R(200, { answer: r.text + '\n' + S.sources(ctx), source: 'gemini' });
+    return R(200, { answer: r.text + '\n' + S.sources(ctx, ctx.lang), source: 'gemini' });
   } catch (e) { return R(502, { error: 'AI request failed' }); } finally { inflight--; }
 };

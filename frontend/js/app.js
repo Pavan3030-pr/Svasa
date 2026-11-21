@@ -59,9 +59,10 @@ function render() {
   const status = st.demo ? 'Sample data' : st.stale ? 'Offline snapshot' : 'Live';
   const trendLabel = { rising: '↗ Worsening', falling: '↘ Improving', steady: '→ Steady' }[tr];
   $('hero').innerHTML =
-    `<div class="ring" style="--p:${Math.min(100, aqi / 3)}" role="img" aria-label="US AQI ${Math.round(aqi)}"><div><b>${Math.round(aqi)}</b><span>US AQI</span></div></div>
+    `<div class="ring" style="--p:0" role="img" aria-label="US AQI ${Math.round(aqi)}"><div><b>${Math.round(aqi)}</b><span>US AQI</span></div></div>
      <div><p class="eyebrow">${esc(st.place.name)} · ${status} · ${esc(c.time.slice(11, 16))}</p>
      <h1>${esc(b.label)}</h1>
+     <p class="verdict">${esc(S.verdict(aqi, st.profile))}</p>
      <p class="lead">${esc(a.go)}${dom ? ' Main driver: ' + S.POLLUTANTS[dom].name + '.' : ''}${wn ? ' ' + esc(wn) : ''}</p>
      <div class="chips-row">
        <span class="chip2">${trendLabel}</span>
@@ -69,8 +70,11 @@ function render() {
        ${ind ? `<span class="chip2">India NAQI ${ind.aqi} · ${esc(ind.label)}</span>` : ''}
        ${win ? `<span class="chip2">Cleanest ${win.start.slice(11, 16)}–${win.end.slice(11, 16)}</span>` : ''}
        ${st.wx ? `<span class="chip2">${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h</span>` : ''}
+       <button type="button" class="btn sm" id="goplan">Plan my day</button>
        <button type="button" class="btn ghost sm" id="share">Share</button>
      </div></div>`;
+  const ring = $('hero').querySelector('.ring'); requestAnimationFrame(() => requestAnimationFrame(() => ring && ring.style.setProperty('--p', Math.min(100, aqi / 3))));
+  $('goplan').onclick = () => show('plan');
   $('share').onclick = async () => {
     const t = `${st.place.name}: AQI ${Math.round(aqi)} (${b.label}). ${a.go} via Svasa`;
     try { if (navigator.share) await navigator.share({ text: t }); else { await navigator.clipboard.writeText(t); $('share').textContent = 'Copied'; setTimeout(() => { const s = $('share'); if (s) s.textContent = 'Share'; }, 1500); } } catch (_) {}
@@ -87,7 +91,7 @@ function render() {
   }).join('');
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
-  drawChart(hrs, win); drawHistory(c);
+  st.hrs = hrs; drawStrip(hrs); drawDisp(); drawChart(hrs, win); drawHistory(c);
   notifyCheck(aqi);
 }
 function drawChart(h, win) {
@@ -97,7 +101,7 @@ function drawChart(h, win) {
   const grid = [50, 100, 150, 200, 300].filter(v => v <= max).map(v => `<line x1="${L}" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e4e8eb"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`).join('');
   const bars = h.map((x, i) => {
     const v = x.aqi || 0, bb = S.band(v), inw = win && i >= win.index && i < win.index + 2, cx = L + i * 26 + 14, y = Y(v);
-    return `<g><title>${x.time.slice(11, 16)} · AQI ${v}</title><rect x="${L + i * 26 + 4}" y="${y}" width="20" height="${Math.max(2, base - y)}" rx="5" fill="${bb.color}"${inw ? ' stroke="#0f1f23" stroke-width="2.5"' : ''}/><text class="v" x="${cx}" y="${y - 4}" text-anchor="middle">${Math.round(v)}</text>${i % 3 === 0 ? `<text x="${cx}" y="${H - 10}" text-anchor="middle">${x.time.slice(11, 13)}h</text>` : ''}</g>`;
+    return `<g data-i="${i}"><rect x="${L + i * 26 + 4}" y="${y}" width="20" height="${Math.max(2, base - y)}" rx="5" fill="${bb.color}"${inw ? ' stroke="#0f1f23" stroke-width="2.5"' : ''}/><text class="v" x="${cx}" y="${y - 4}" text-anchor="middle">${Math.round(v)}</text>${i % 3 === 0 ? `<text x="${cx}" y="${H - 10}" text-anchor="middle">${x.time.slice(11, 13)}h</text>` : ''}</g>`;
   }).join('');
   $('chart').innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Hourly AQI for the next 24 hours with values. Outlined bars mark the cleanest window.">${grid}${bars}</svg>` + legend();
 }
@@ -109,6 +113,27 @@ function drawHistory(c) {
     const bh = Math.max(3, d.avg / max * 110), bb = S.band(d.avg);
     return `<g><title>${d.date} AQI ${d.avg}</title><rect x="${i * 64 + 8}" y="${130 - bh}" width="46" height="${bh}" rx="6" fill="${bb.color}"/><text x="${i * 64 + 31}" y="${124 - bh}" text-anchor="middle">${d.avg}</text><text x="${i * 64 + 31}" y="150" text-anchor="middle">${esc(d.date.slice(5))}</text></g>`;
   }).join('') + '</svg>' + legend();
+}
+
+function drawStrip(hrs) {
+  $('strip').innerHTML = hrs.slice(0, 12).map(x => `<div class="hr"><span>${esc(x.time.slice(11, 13))}h</span><i style="background:${S.band(x.aqi || 0).color}"></i><b>${Math.round(x.aqi || 0)}</b></div>`).join('') || '<p class="muted">No hourly data.</p>';
+}
+function drawDisp() {
+  const d = S.dispersion(st.wx, st.ctx.aqi);
+  $('disp').innerHTML = d ? `<p class="lead" style="margin:0">${esc(d.text)}</p><div class="drv"><div><small>Dispersion</small><b>${esc(d.level)}</b></div><div><small>Wind</small><b>${st.wx.w} km/h</b></div><div><small>Humidity</small><b>${st.wx.h}%</b></div><div><small>Temperature</small><b>${st.wx.t}°C</b></div></div>` : '<p class="muted">Weather data is unavailable right now.</p>';
+}
+function tip(e) {
+  const g = e.target.closest && e.target.closest('g[data-i]'), t = $('tip');
+  const x = g && st.hrs && st.hrs[+g.dataset.i]; if (!x) { t.hidden = true; return; }
+  const v = Math.round(x.aqi || 0), h = +x.time.slice(11, 13), b = S.band(v);
+  t.innerHTML = `<b>${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00</b><br>AQI ${v} · ${esc(b.label)}` + (typeof x.pm2_5 === 'number' ? `<br>PM2.5 ${x.pm2_5.toFixed(0)} µg/m³` : '');
+  t.hidden = false; t.style.left = Math.max(8, Math.min(innerWidth - 240, e.clientX + 12)) + 'px'; t.style.top = Math.max(8, e.clientY - 70) + 'px';
+}
+['pointerover', 'pointermove', 'pointerdown'].forEach(ev => $('chart').addEventListener(ev, tip));
+$('chart').addEventListener('pointerleave', () => { $('tip').hidden = true; });
+async function reverse(lat, lon) {
+  try { const r = await jget(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`); const n = r.city || r.locality || r.principalSubdivision; return n ? n + (r.countryName ? ', ' + r.countryName : '') : null; }
+  catch (_) { return null; }
 }
 
 /* ---------- cities ---------- */
@@ -137,6 +162,17 @@ function plan() {
 
 /* ---------- assistant ---------- */
 const QS = ['Can I run outside?', 'Do I need a mask?', 'Best time to go out?', 'Should I open windows?', 'Is it safe for my child?', 'What is polluting the air?'];
+const UI = {
+  en: { ph: 'Can I run outside today?', send: 'Send', qs: QS },
+  hi: { ph: 'आज क्या मैं बाहर दौड़ सकता हूँ?', send: 'भेजें', qs: ['क्या मैं बाहर दौड़ सकता हूँ?', 'क्या मुझे मास्क चाहिए?', 'बाहर जाने का सबसे अच्छा समय?', 'क्या खिड़कियाँ खोलूँ?', 'क्या यह मेरे बच्चे के लिए सुरक्षित है?', 'हवा में क्या प्रदूषण है?'] },
+  te: { ph: 'ఈ రోజు బయట పరిగెత్తవచ్చా?', send: 'పంపండి', qs: ['నేను బయట పరిగెత్తవచ్చా?', 'నాకు మాస్క్ అవసరమా?', 'బయటకు వెళ్లడానికి ఉత్తమ సమయం?', 'కిటికీలు తెరవాలా?', 'ఇది నా బిడ్డకు సురక్షితమా?', 'గాలిలో ఏ కాలుష్యం ఉంది?'] },
+  ta: { ph: 'இன்று வெளியே ஓடலாமா?', send: 'அனுப்பு', qs: ['நான் வெளியே ஓடலாமா?', 'எனக்கு முகக்கவசம் தேவையா?', 'வெளியே செல்ல சிறந்த நேரம்?', 'ஜன்னல்களைத் திறக்கலாமா?', 'இது என் குழந்தைக்கு பாதுகாப்பானதா?', 'காற்றில் என்ன மாசு உள்ளது?'] },
+  bn: { ph: 'আজ কি বাইরে দৌড়াতে পারি?', send: 'পাঠান', qs: ['আমি কি বাইরে দৌড়াতে পারি?', 'আমার কি মাস্ক দরকার?', 'বাইরে যাওয়ার সেরা সময় কখন?', 'জানালা খুলব কি?', 'এটা কি আমার সন্তানের জন্য নিরাপদ?', 'বাতাসে কী দূষণ আছে?'] }
+};
+function setAskLang(l) {
+  const u = UI[l] || UI.en; $('aq').placeholder = u.ph; $('af').querySelector('button').textContent = u.send;
+  $('qs').innerHTML = u.qs.map((q, i) => `<button type="button" class="chip" data-en="${esc(QS[i])}">${esc(q)}</button>`).join('');
+}
 function pushMsg(role, text, cls) {
   const m = document.createElement('div'); m.className = 'msg ' + role + (cls ? ' ' + cls : ''); m.textContent = text;
   $('log').appendChild(m); $('log').scrollTop = $('log').scrollHeight; return m;
@@ -147,12 +183,12 @@ async function viaServer(q) {
   if (!r.ok) throw new Error('server ' + r.status);
   return (await r.json()).answer;
 }
-async function ask(q) {
+async function ask(q, en) {
   q = S.cleanQuery(q); if (!q || busy) return;
   pushMsg('u', q);
-  const sf = S.safety(q); if (sf) { pushMsg('a', sf, 'urgent'); return; }
+  const sf = S.safety(q, st.lang); if (sf) { pushMsg('a', sf, 'urgent'); return; }
   if (!st.ctx) { pushMsg('a', 'Search a city first and I will answer from its live air data.'); return; }
-  busy = true; const fb = S.answer(q, st.ctx), t = pushMsg('a', 'Thinking…', 'typing'); let a = null;
+  busy = true; const fb = S.answer(en || q, st.ctx), t = pushMsg('a', 'Thinking…', 'typing'); let a = null;
   if (location.protocol.startsWith('http')) { try { a = await viaServer(q); } catch (_) {} }
   t.textContent = a || fb; t.classList.remove('typing'); $('log').scrollTop = $('log').scrollHeight;
   st.hist = st.hist.concat([{ r: 'u', t: q }, { r: 'a', t: a || fb }]).slice(-8); busy = false;
@@ -207,7 +243,10 @@ $('f').addEventListener('submit', async e => {
 document.addEventListener('click', e => { if (!e.target.closest('.search')) $('sugg').hidden = true; });
 $('loc').onclick = () => {
   if (!navigator.geolocation) { banner('Location is not supported in this browser. Search for a city instead.'); return; }
-  navigator.geolocation.getCurrentPosition(p => { load({ name: 'Your location', lat: p.coords.latitude, lon: p.coords.longitude }); show('today'); }, () => banner('Location permission was denied. Search for a city instead.'), { timeout: 8000 });
+  navigator.geolocation.getCurrentPosition(async p => {
+    const lat = p.coords.latitude, lon = p.coords.longitude, name = await reverse(lat, lon);
+    load({ name: name || 'Your location', lat, lon }); show('today');
+  }, () => banner('Location permission was denied. Search for a city instead.'), { timeout: 8000 });
 };
 $('plan').onclick = plan;
 for (let i = 0; i < 24; i++) $('from').add(new Option(String(i).padStart(2, '0') + ':00', i));
@@ -223,15 +262,20 @@ $('notif').onclick = async () => {
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('inst').hidden = false; });
 $('inst').onclick = async () => { if (deferredInstall) { deferredInstall.prompt(); deferredInstall = null; $('inst').hidden = true; } };
 $('lang').innerHTML = Object.entries(S.LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-$('lang').onchange = e => { st.lang = e.target.value; };
-$('qs').innerHTML = QS.map(q => `<button type="button" class="chip">${q}</button>`).join('');
-$('qs').onclick = e => { const b = e.target.closest('button'); if (b) ask(b.textContent); };
+$('lang').onchange = e => { st.lang = e.target.value; setAskLang(st.lang); };
+setAskLang('en');
+$('qs').onclick = e => { const b = e.target.closest('button'); if (b) ask(b.textContent, b.dataset.en); };
 $('af').onsubmit = e => { e.preventDefault(); const v = $('aq').value; $('aq').value = ''; ask(v); };
 pushMsg('a', 'Hi, I am Svasa. Ask me about the air in your city, when to go out, or whether you need a mask.');
 fetch('/api/health').then(r => r.json()).then(j => { st.serverAI = !!j.ai; $('aimode').textContent = j.ai ? 'Gemini on' : 'Rule-based answers'; }).catch(() => { $('aimode').textContent = 'Rule-based answers'; });
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 setInterval(() => { if (st.place && !document.hidden) load(st.place); }, 5 * 60 * 1000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+$('onbchips').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<button type="button" class="chip" data-k="${k}">${esc(v.name)}</button>`).join('');
+$('onbchips').onclick = e => { const b = e.target.closest('button'); if (!b) return; st.profile = b.dataset.k; $('profile').value = st.profile; store.set('svasa_onb', 1); $('onb').hidden = true; if (st.data) render(); };
+$('onbskip').onclick = () => { store.set('svasa_onb', 1); $('onb').hidden = true; };
+$('onb').hidden = !!store.get('svasa_onb', 0);
 
 /* ---------- boot ---------- */
 show(location.hash.slice(1));
