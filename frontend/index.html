@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Svasa · Air quality, explained</title>
 <meta name="description" content="Live air quality for any city with health-aware advice, hourly forecast, trip planner and an AI assistant.">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#ffffff"><meta name="color-scheme" content="light">
+<meta property="og:type" content="website"><meta property="og:title" content="Svasa · Air quality, explained"><meta property="og:description" content="Live air quality with health-aware advice, hourly forecast, trip planner and an AI assistant.">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -75,7 +77,7 @@
 
       <section id="v-cities" class="view" hidden>
         <div class="card"><div class="cardhead"><h2>Compare cities</h2><div class="row"><button type="button" class="btn ghost" id="addc">Add current city</button><button type="button" class="btn ghost" id="clrc">Clear</button></div></div>
-          <p class="muted">Cleanest first. Tap a city to open it.</p><div id="cmp"></div></div>
+          <p class="muted">Cleanest first. Tap a city to open it.</p><div class="chips" id="pop" style="margin:12px 0"></div><div id="cmp"></div></div>
       </section>
 
       <section id="v-ask" class="view" hidden>

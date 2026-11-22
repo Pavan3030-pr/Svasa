@@ -39,4 +39,9 @@ t('localised emergency replies', () => { assert.match(S.safety('सांस न
 t('localised sources line', () => { const c={aqi:160,dominant:'pm2_5',trend:'rising',window:{start:'2026-11-19T05:00',end:'2026-11-19T07:00'}}; assert.match(S.sources(c,'hi'),/उपयोग किया गया डेटा.*PM2\.5.*05:00-07:00/); assert.match(S.sources(c),/^Data used/); assert.match(S.sources(c,'zz'),/^Data used/); });
 t('dispersion and verdict', () => { assert.equal(S.dispersion({w:3,h:85,t:20},150).level,'Poor'); assert.match(S.dispersion({w:3,h:85,t:20},150).text,/humidity/); assert.equal(S.dispersion({w:25,h:40,t:20},50).level,'Good'); assert.equal(S.dispersion(null,1),null); assert.equal(S.verdict(30,'general'),'Good to go outside'); assert.equal(S.verdict(170,'general'),'Avoid outdoor exercise'); assert.equal(S.verdict(80,'asthma'),'Limit time outside'); assert.equal(S.verdict(NaN,'general'),'No data'); });
 t('plants and laundry intents', () => { const c={aqi:160,profile:'general'}; assert.match(S.answer('what about plants',c),/HEPA/); assert.match(S.answer('can I dry laundry outside',c),/indoors/); });
+t('band text colours meet WCAG AA (4.5:1) on white and on their tint', () => {
+  const L=h=>{const v=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map(x=>x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4));return .2126*v[0]+.7152*v[1]+.0722*v[2]};
+  const R=(a,b)=>{const x=Math.max(L(a),L(b)),y=Math.min(L(a),L(b));return (x+.05)/(y+.05)};
+  S.BANDS.forEach(b=>{assert.ok(R(b.ink,'#ffffff')>=4.5,b.key+' on white'); assert.ok(R(b.ink,b.bg)>=4.5,b.key+' on tint');});
+});
 console.log(n + ' tests passed');

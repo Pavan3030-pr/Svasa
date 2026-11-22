@@ -28,7 +28,7 @@ function demo() {
   return { current: { time: day + 'T12:00', us_aqi: 132, pm2_5: 48.2, pm10: 90, nitrogen_dioxide: 38, ozone: 72, sulphur_dioxide: 12, carbon_monoxide: 610, us_aqi_pm2_5: 132, us_aqi_pm10: 70, us_aqi_nitrogen_dioxide: 30, us_aqi_ozone: 55, us_aqi_sulphur_dioxide: 8, us_aqi_carbon_monoxide: 7 }, hourly: { time, us_aqi: us, pm2_5: pm } };
 }
 async function load(p) {
-  st.place = p; $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
+  st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
   try {
     const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5&forecast_days=2&past_days=7&timezone=auto`);
@@ -52,7 +52,7 @@ async function load(p) {
 function render() {
   const c = st.data.current, aqi = c.us_aqi, b = S.band(aqi), a = S.advice(aqi, st.profile), dom = S.dominant(c);
   const hrs = S.hourlyFrom(st.data, c.time), win = S.bestWindow(hrs, 2), tr = S.trend(hrs);
-  const root = document.documentElement.style; root.setProperty('--c', b.color); root.setProperty('--t', b.bg);
+  const root = document.documentElement.style; root.setProperty('--c', b.color); root.setProperty('--t', b.bg); root.setProperty('--ci', b.ink);
   st.ctx = { aqi, profile: st.profile, dominant: dom, window: win, trend: tr, city: st.place.name, wx: st.wx };
 
   const avgPm = S.trailingAvg(st.data, 'pm2_5', c.time, 24), ind = S.indiaAqi(avgPm == null ? c : Object.assign({}, c, { pm2_5: avgPm })), wn = S.windNote(st.wx && st.wx.w, aqi);
@@ -142,7 +142,7 @@ async function drawCities() {
   for (const p of cmp) { try { const r = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=us_aqi,pm2_5`); out.push({ name: p.name, aqi: r.current.us_aqi, pm: r.current.pm2_5, p }); } catch (_) {} }
   const rk = S.rank(out);
   $('cmp').innerHTML = rk.length ? rk.map((x, i) => { const b = S.band(x.aqi);
-    return `<div class="cmprow"><button type="button" class="btn ghost" data-go="${i}">${esc(x.name)}</button><div class="bar" role="img" aria-label="AQI ${Math.round(x.aqi)}"><i style="width:${Math.min(100, x.aqi / 3)}%;background:${b.color}"></i></div><b style="color:${b.color}">${Math.round(x.aqi)}</b><small>${esc(b.label)}${typeof x.pm === 'number' ? ' · PM2.5 ' + x.pm.toFixed(0) : ''}</small><button type="button" class="btn ghost" data-rm="${i}" aria-label="Remove ${esc(x.name)}">✕</button></div>`; }).join('')
+    return `<div class="cmprow"><button type="button" class="btn ghost" data-go="${i}">${esc(x.name)}</button><div class="bar" role="img" aria-label="AQI ${Math.round(x.aqi)}"><i style="width:${Math.min(100, x.aqi / 3)}%;background:${b.color}"></i></div><b style="color:${b.ink}">${Math.round(x.aqi)}</b><small>${esc(b.label)}${typeof x.pm === 'number' ? ' · PM2.5 ' + x.pm.toFixed(0) : ''}</small><button type="button" class="btn ghost" data-rm="${i}" aria-label="Remove ${esc(x.name)}">✕</button></div>`; }).join('')
     : '<p class="muted">No cities yet. Open a city, then tap “Add current city”.</p>';
   $('cmp').onclick = e => {
     const t = e.target.closest('button'); if (!t) return;
@@ -150,6 +150,26 @@ async function drawCities() {
     if (t.dataset.rm !== undefined) { cmp = cmp.filter(c => c.name !== rk[t.dataset.rm].name); store.set('svasa_cmp', cmp); drawCities(); }
   };
 }
+
+const POP = [['Delhi, India', 28.6139, 77.209], ['Mumbai, India', 19.076, 72.8777], ['Hyderabad, India', 17.385, 78.4867], ['Bengaluru, India', 12.9716, 77.5946], ['Kolkata, India', 22.5726, 88.3639], ['Chennai, India', 13.0827, 80.2707]];
+$('pop').innerHTML = '<span class="muted" style="margin:0">Quick add:</span>' + POP.map((c, i) => `<button type="button" class="chip" data-p="${i}">${esc(c[0].split(',')[0])}</button>`).join('') + '<button type="button" class="chip" data-p="all">Add all</button>';
+$('pop').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return; const mk = c => ({ name: c[0], lat: c[1], lon: c[2] });
+  if (b.dataset.p === 'all') cmp = POP.map(mk); else { const c = mk(POP[+b.dataset.p]); if (!cmp.some(x => x.name === c.name)) cmp = cmp.slice(-5).concat([c]); }
+  store.set('svasa_cmp', cmp); drawCities();
+};
+function pushRecent(p) {
+  if (!p || p.name === 'Your location') return;
+  const r = store.get('svasa_recent', []).filter(x => x.name !== p.name); r.unshift({ name: p.name, lat: p.lat, lon: p.lon }); store.set('svasa_recent', r.slice(0, 5));
+}
+function showRecent() {
+  const r = store.get('svasa_recent', []), s = $('sugg'); if (!r.length || $('q').value) return;
+  s.innerHTML = '<div class="sugghead">Recent</div>' + r.map((x, i) => `<button type="button" data-i="${i}">${esc(x.name)}</button>`).join(''); s.hidden = false;
+  s.onclick = e => { const b = e.target.closest('button'); if (b) { s.hidden = true; load(r[b.dataset.i]); show('today'); } };
+}
+$('q').addEventListener('focus', showRecent);
+window.addEventListener('error', e => { if (!/ResizeObserver/.test(e.message || '')) banner('Something went wrong. Please refresh the page.'); });
+window.addEventListener('unhandledrejection', () => banner('Something went wrong. Please refresh the page.'));
 
 /* ---------- planner ---------- */
 function plan() {
@@ -230,7 +250,7 @@ function show(v) {
 $('nav').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
 $('profile').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('');
 $('profile').onchange = e => { st.profile = e.target.value; if (st.data) render(); };
-$('q').addEventListener('input', e => { clearTimeout(suggTimer); suggTimer = setTimeout(() => suggest(e.target.value), 250); });
+$('q').addEventListener('input', e => { $('sugg').hidden = true; clearTimeout(suggTimer); suggTimer = setTimeout(() => suggest(e.target.value), 250); });
 $('q').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { const b = $('sugg').querySelector('button'); if (b) { e.preventDefault(); b.focus(); } } if (e.key === 'Escape') $('sugg').hidden = true; });
 $('sugg').addEventListener('keydown', e => { const b = e.target.closest('button'); if (!b) return; if (e.key === 'ArrowDown' && b.nextElementSibling) { e.preventDefault(); b.nextElementSibling.focus(); } if (e.key === 'ArrowUp') { e.preventDefault(); (b.previousElementSibling || $('q')).focus(); } if (e.key === 'Escape') { $('sugg').hidden = true; $('q').focus(); } });
 $('f').addEventListener('submit', async e => {

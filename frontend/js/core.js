@@ -1,11 +1,11 @@
 (function (root) {
   const BANDS = [
-    { max: 50, key: 'good', label: 'Good', color: '#2e9e6b', bg: '#e6f6ee' },
-    { max: 100, key: 'moderate', label: 'Moderate', color: '#c9a400', bg: '#fbf6dc' },
-    { max: 150, key: 'usg', label: 'Unhealthy for sensitive groups', color: '#e8801a', bg: '#fdeedd' },
-    { max: 200, key: 'unhealthy', label: 'Unhealthy', color: '#d9453b', bg: '#fbe6e4' },
-    { max: 300, key: 'very', label: 'Very unhealthy', color: '#8e4aa8', bg: '#f1e5f6' },
-    { max: Infinity, key: 'hazard', label: 'Hazardous', color: '#7a1f3d', bg: '#f4e1e8' }
+    { max: 50, key: 'good', label: 'Good', color: '#2e9e6b', bg: '#e6f6ee', ink: '#1f724d' },
+    { max: 100, key: 'moderate', label: 'Moderate', color: '#c9a400', bg: '#fbf6dc', ink: '#7f6700' },
+    { max: 150, key: 'usg', label: 'Unhealthy for sensitive groups', color: '#e8801a', bg: '#fdeedd', ink: '#9d560f' },
+    { max: 200, key: 'unhealthy', label: 'Unhealthy', color: '#d9453b', bg: '#fbe6e4', ink: '#b2382f' },
+    { max: 300, key: 'very', label: 'Very unhealthy', color: '#8e4aa8', bg: '#f1e5f6', ink: '#85459d' },
+    { max: Infinity, key: 'hazard', label: 'Hazardous', color: '#7a1f3d', bg: '#f4e1e8', ink: '#7a1f3d' }
   ];
   const PROFILES = {
     general: { name: 'Everyone', shift: 0 },

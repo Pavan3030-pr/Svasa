@@ -2,12 +2,23 @@
 
 Urban air quality assistant. Live AQI for any city, advice tuned to your health profile, an hourly forecast, a trip planner, city comparison and an AI assistant powered by Gemini.
 
+## Screenshots
+Sample data, rendered in a headless browser.
+
+| Today | Forecast |
+|---|---|
+| ![Today](docs/screenshots/today.png) | ![Forecast](docs/screenshots/forecast.png) |
+| ![Planner](docs/screenshots/planner.png) | ![Assistant](docs/screenshots/assistant.png) |
+
+![Mobile](docs/screenshots/today-mobile.png)
+
 ## Features
 - Live US AQI with an India NAQI estimate, pollutant breakdown against WHO guidelines
 - Health profiles (asthma, child, older adult, and more) with tailored advice
 - 24-hour forecast, cleanest-window finder, 7-day history
 - Commute and workout planner with a time range
-- City comparison, threshold alerts, offline snapshot, installable PWA
+- City comparison with one-tap popular cities, recent searches, threshold alerts, offline snapshot, installable PWA
+- Assistant answers in English, Hindi, Telugu, Tamil and Bengali, with localised emergency messages
 - Gemini assistant with a safety layer for emergencies
 
 ## Project structure
@@ -18,14 +29,14 @@ svasa/
 │   ├── css/styles.css
 │   ├── js/app.js      UI and views
 │   ├── js/core.js     Shared logic (also used by the backend)
-│   ├── sw.js, manifest.json, icon.svg
+│   ├── sw.js, manifest.json, icon.svg, icons/
 ├── backend/           API logic and local server
 │   ├── routes/        ask.js, health.js
 │   ├── lib/           gemini.js, guard.js
 │   └── server.js      Local and Docker server
 ├── api/               Vercel serverless entry points (thin wrappers)
 ├── tests/             Unit, server and serverless tests
-├── docs/              PRD.md, SECURITY.md
+├── docs/              PRD.md, SECURITY.md, DEMO.md, screenshots/
 ├── vercel.json, Dockerfile, package.json
 ```
 
