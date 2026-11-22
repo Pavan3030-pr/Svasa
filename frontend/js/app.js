@@ -4,7 +4,7 @@ const S = window.Svasa, $ = id => document.getElementById(id);
 const AQ = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
 const WX = 'https://api.open-meteo.com/v1/forecast';
-const VIEWS = ['today', 'hourly', 'plan', 'cities', 'ask'];
+const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask'];
 const st = { profile: 'general', place: null, data: null, wx: null, demo: false, stale: null, ctx: null, lang: 'en', hist: [], serverAI: false };
 let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer;
 
@@ -45,7 +45,7 @@ async function load(p) {
   } catch (_) { st.wx = null; }
   store.set('svasa_last', { p, profile: st.profile });
   $('v-today').classList.remove('loading');
-  render(); drawCities();
+  render(); drawCities(); loadStation();
 }
 
 /* ---------- render ---------- */
@@ -92,6 +92,7 @@ function render() {
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
   st.hrs = hrs; drawStrip(hrs); drawDisp(); drawChart(hrs, win); drawHistory(c);
+  $('btip').textContent = S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
   notifyCheck(aqi);
 }
 function drawChart(h, win) {
@@ -134,6 +135,26 @@ $('chart').addEventListener('pointerleave', () => { $('tip').hidden = true; });
 async function reverse(lat, lon) {
   try { const r = await jget(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`); const n = r.city || r.locality || r.principalSubdivision; return n ? n + (r.countryName ? ', ' + r.countryName : '') : null; }
   catch (_) { return null; }
+}
+
+async function loadStation() {
+  const p = st.place, gc = $('gcard'); gc.hidden = true; if (!p || st.demo || !location.protocol.startsWith('http')) return;
+  try {
+    const r = await fetch(`/api/stations?lat=${p.lat}&lon=${p.lon}`); if (!r.ok) return;
+    const j = await r.json(); if (st.place === p) drawStation(j.station);
+  } catch (_) {}
+}
+function drawStation(s) {
+  const gc = $('gcard'), c = st.data.current; gc.hidden = false;
+  if (!s) { $('gs').innerHTML = '<p class="muted" style="margin:0">No monitoring station reporting PM2.5 within 25 km. Showing the model estimate only.</p>'; return; }
+  const model = c.pm2_5, diff = s.pm25 > 0 && typeof model === 'number' ? Math.round((model - s.pm25) / s.pm25 * 100) : null;
+  const age = s.ageHours == null ? '' : s.ageHours < 1 ? 'less than an hour ago' : Math.round(s.ageHours) + ' h ago';
+  let v = diff === null ? '' : Math.abs(diff) <= 20 ? 'The model and the station agree closely.' : diff > 0 ? `The model reads ${diff}% higher than this station, so air near the station is cleaner than the estimate.` : `The model reads ${Math.abs(diff)}% lower than this station, so air near the station is worse than the estimate.`;
+  if (s.ageHours != null && s.ageHours > 24) v += ' This reading is more than a day old.';
+  const aqi = S.pm25ToAqi(s.pm25), b = aqi == null ? null : S.band(aqi);
+  $('gs').innerHTML = `<p class="lead" style="margin:0"><b>${esc(s.name)}</b> · ${s.distanceKm} km away${age ? ' · measured ' + esc(age) : ''}</p>
+    <div class="drv"><div><small>Station PM2.5</small><b>${s.pm25.toFixed(1)} µg/m³</b></div><div><small>Model PM2.5</small><b>${typeof model === 'number' ? model.toFixed(1) + ' µg/m³' : 'n/a'}</b></div>${b ? `<div><small>Station ≈ US AQI</small><b style="color:${b.ink}">${aqi}</b></div>` : ''}</div>
+    <p class="muted">${esc(v)} Station values are hourly readings, so the AQI shown is what that PM2.5 would score if it lasted. Source: OpenAQ.</p>`;
 }
 
 /* ---------- cities ---------- */
@@ -237,9 +258,21 @@ async function suggest(v) {
 }
 function pick(x) { $('sugg').hidden = true; $('q').value = ''; load({ name: x.name + (x.country ? ', ' + x.country : ''), lat: x.latitude, lon: x.longitude }); show('today'); }
 
+/* ---------- breathe ---------- */
+const PH = [['Inhale', 4000], ['Hold', 4000], ['Exhale', 6000]];
+let bTimer = null, bPhase = 0, bCycles = 0;
+function breatheStop() { clearTimeout(bTimer); bTimer = null; $('bstart').textContent = 'Start'; $('borb').className = 'orb'; $('bphase').textContent = 'Ready'; }
+function breatheStep() {
+  const n = PH[bPhase][0], ms = PH[bPhase][1], o = $('borb');
+  $('bphase').textContent = n; o.style.setProperty('--d', ms + 'ms'); o.className = 'orb ' + (n === 'Exhale' ? 'out' : 'in');
+  bTimer = setTimeout(() => { bPhase = (bPhase + 1) % PH.length; if (bPhase === 0) { bCycles++; $('bcount').textContent = bCycles + (bCycles === 1 ? ' cycle' : ' cycles'); } breatheStep(); }, ms);
+}
+$('bstart').onclick = () => { if (bTimer) { breatheStop(); return; } bPhase = 0; bCycles = 0; $('bcount').textContent = '0 cycles'; $('bstart').textContent = 'Stop'; breatheStep(); };
+
 /* ---------- router ---------- */
 function show(v) {
   if (!VIEWS.includes(v)) v = 'today';
+  if (v !== 'breathe') breatheStop();
   document.querySelectorAll('.view').forEach(s => { s.hidden = s.id !== 'v-' + v; });
   document.querySelectorAll('#nav button').forEach(b => b.setAttribute('aria-current', b.dataset.view === v ? 'page' : 'false'));
   if (history.replaceState) history.replaceState(null, '', '#' + v);

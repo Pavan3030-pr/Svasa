@@ -1,7 +1,7 @@
 'use strict';
 // Local / container server: serves frontend/ and the same API handlers used on Vercel.
 const http = require('http'), fs = require('fs'), path = require('path');
-const ask = require('./routes/ask'), health = require('./routes/health'), g = require('./lib/guard');
+const ask = require('./routes/ask'), stations = require('./routes/stations'), health = require('./routes/health'), g = require('./lib/guard');
 const FRONT = path.resolve(__dirname, '../frontend');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.open-meteo.com https://api.bigdatacloud.net; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'";
@@ -22,6 +22,11 @@ const server = http.createServer(async (req, res) => {
     const url = req.url.split('?')[0];
     res.on('finish', () => { if (res.statusCode >= 400) console.log(JSON.stringify({ t: new Date().toISOString(), ip: g.ip(req), m: req.method, u: url, s: res.statusCode })); });
     if (url === '/api/health' && req.method === 'GET') { const r = health(); return send(res, r.status, r.body); }
+    if (url === '/api/stations') {
+      const q = Object.fromEntries(new URL(req.url, 'http://x').searchParams);
+      const r = await stations({ method: req.method, query: q, headers: req.headers, ip: g.ip(req) });
+      return send(res, r.status, r.body);
+    }
     if (url === '/api/ask') {
       let body = null;
       if (req.method === 'POST') {

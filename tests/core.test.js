@@ -44,4 +44,5 @@ t('band text colours meet WCAG AA (4.5:1) on white and on their tint', () => {
   const R=(a,b)=>{const x=Math.max(L(a),L(b)),y=Math.min(L(a),L(b));return (x+.05)/(y+.05)};
   S.BANDS.forEach(b=>{assert.ok(R(b.ink,'#ffffff')>=4.5,b.key+' on white'); assert.ok(R(b.ink,b.bg)>=4.5,b.key+' on tint');});
 });
+t('PM2.5 to US AQI (2024 breakpoints)', () => { assert.equal(S.pm25ToAqi(0),0); assert.equal(S.pm25ToAqi(9),50); assert.equal(S.pm25ToAqi(12),56); assert.equal(S.pm25ToAqi(35.4),100); assert.equal(S.pm25ToAqi(55.4),150); assert.equal(S.pm25ToAqi(125.4),200); assert.equal(S.pm25ToAqi(900),500); assert.equal(S.pm25ToAqi(-1),null); assert.equal(S.pm25ToAqi('x'),null); });
 console.log(n + ' tests passed');

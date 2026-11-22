@@ -245,6 +245,13 @@
     const l=effectiveLevel(aqi,p);
     return l<0?'No data':l===0?'Good to go outside':l===1?'Fine for most outdoor plans':l===2?'Limit time outside':l===3?'Avoid outdoor exercise':'Stay indoors';
   }
-  const api = { dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
+
+  const PM_BP=[[0,9,0,50],[9.1,35.4,51,100],[35.5,55.4,101,150],[55.5,125.4,151,200],[125.5,225.4,201,300],[225.5,325.4,301,500]];
+  function pm25ToAqi(v){
+    if(typeof v!=='number'||!isFinite(v)||v<0)return null;const x=Math.floor(v*10)/10;
+    for(const r of PM_BP){if(x<=r[1])return Math.round((r[3]-r[2])/(r[1]-r[0])*(x-r[0])+r[2])}
+    return 500;
+  }
+  const api = { pm25ToAqi, dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Svasa = api;
 })(typeof window !== 'undefined' ? window : globalThis);

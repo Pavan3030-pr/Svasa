@@ -5,6 +5,8 @@ Urban air quality assistant. Live AQI for any city, advice tuned to your health 
 ## Screenshots
 Sample data, rendered in a headless browser.
 
+![Landing page](docs/screenshots/landing.png)
+
 | Today | Forecast |
 |---|---|
 | ![Today](docs/screenshots/today.png) | ![Forecast](docs/screenshots/forecast.png) |
@@ -13,6 +15,9 @@ Sample data, rendered in a headless browser.
 ![Mobile](docs/screenshots/today-mobile.png)
 
 ## Features
+- Landing page with live readings for six Indian cities
+- Ground check: nearest OpenAQ monitoring station compared with the model (needs `OPENAQ_API_KEY`)
+- Guided breathing exercise (4-4-6) that reads the current air quality
 - Live US AQI with an India NAQI estimate, pollutant breakdown against WHO guidelines
 - Health profiles (asthma, child, older adult, and more) with tailored advice
 - 24-hour forecast, cleanest-window finder, 7-day history
@@ -25,9 +30,11 @@ Sample data, rendered in a headless browser.
 ```
 svasa/
 ├── frontend/          Static web app (no build step)
-│   ├── index.html
-│   ├── css/styles.css
-│   ├── js/app.js      UI and views
+│   ├── index.html     Landing page
+│   ├── app.html       The app
+│   ├── css/           styles.css (app), landing.css
+│   ├── js/app.js      App UI and views
+│   ├── js/landing.js  Landing page live ticker
 │   ├── js/core.js     Shared logic (also used by the backend)
 │   ├── sw.js, manifest.json, icon.svg, icons/
 ├── backend/           API logic and local server
@@ -54,6 +61,7 @@ Without a key the app still works with rule-based answers.
 |---|---|---|
 | `GEMINI_API_KEY` | For AI answers | none |
 | `GEMINI_MODEL` | No | `gemini-2.5-flash` |
+| `OPENAQ_API_KEY` | For the ground-station check | none |
 | `PORT` | No | `8080` |
 
 ## Deploy to Vercel
@@ -64,7 +72,8 @@ Without a key the app still works with rule-based answers.
 Check `/api/health`: it should return `{"ok":true,"ai":true}`.
 
 ## API
-- `GET /api/health` returns service and AI status.
+- `GET /api/health` returns service, AI and station status.
+- `GET /api/stations?lat=&lon=` returns the nearest OpenAQ station with PM2.5.
 - `POST /api/ask` takes `{ q, ctx }` and returns `{ answer, source }`.
 
 ## Data and limits
