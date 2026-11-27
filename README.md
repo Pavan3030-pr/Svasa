@@ -91,3 +91,6 @@ The partial India-scale display uses four 24-hour pollutant components (PM2.5, P
 
 ### Quality evidence
 GitHub Actions runs syntax checks, unit and mocked API integration tests, HTTP smoke checks, browser workflows and axe accessibility reports. Browser screenshots and accessibility findings are uploaded as workflow artifacts. A separate Lighthouse workflow records local performance/accessibility/best-practices/SEO scores, rather than declaring unmeasured targets met. It may depend on network availability and is not a live-provider certification.
+
+### Performance design
+The application uses system typography without third-party font downloads. Air data is rendered before optional weather, and forecast charts and city comparisons are loaded when needed. The service worker caches known static assets only and never caches APIs. Lighthouse results vary with network and runner conditions.

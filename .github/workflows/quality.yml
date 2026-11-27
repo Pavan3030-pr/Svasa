@@ -33,7 +33,7 @@ jobs:
               npx --no-install lighthouse "http://localhost:8080/$page.html" $EXTRA --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path="quality-artifacts/$page-$mode.json" --quiet
             done
           done
-          node -e "const fs=require('fs');for(const f of fs.readdirSync('quality-artifacts').filter(x=>x.endsWith('.json'))){const j=JSON.parse(fs.readFileSync('quality-artifacts/'+f));if(j.runtimeError)throw Error(j.runtimeError.message);console.log(f,JSON.stringify(Object.fromEntries(Object.entries(j.categories).map(([k,v])=>[k,Math.round(v.score*100)]))))}" | tee quality-artifacts/scores.txt
+          node -e "const fs=require('fs');for(const f of fs.readdirSync('quality-artifacts').filter(x=>x.endsWith('.json'))){const j=JSON.parse(fs.readFileSync('quality-artifacts/'+f));if(j.runtimeError)throw Error(j.runtimeError.message);console.log(f,JSON.stringify(Object.fromEntries(Object.entries(j.categories).map(([k,v])=>[k,Math.round(v.score*100)]))));console.log('Diagnostics',JSON.stringify(Object.values(j.audits).filter(a=>a.score!==null&&a.score<0.9).map(a=>({id:a.id,score:a.score,displayValue:a.displayValue})).slice(0,25)))}" | tee quality-artifacts/scores.txt
       - name: Upload audit reports
         if: always()
         uses: actions/upload-artifact@v4

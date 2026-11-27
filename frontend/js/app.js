@@ -13,8 +13,8 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
 };
-async function jget(u) {
-  const c = new AbortController(), t = setTimeout(() => c.abort(), 12000);
+async function jget(u, timeout=8000) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), timeout);
   try { const r = await fetch(u, { signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
   finally { clearTimeout(t); }
 }
@@ -33,8 +33,10 @@ async function load(p) {
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
   st.ctx = null; st.data = null; invalidatePlan(); $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = true;
-  $('hero').textContent = 'Loading current air data…';
+  $('hero').innerHTML='<div class="ring loadingring" aria-hidden="true"><div><b>—</b><span>US AQI</span></div></div><div><p class="eyebrow">Retrieving model data</p><h1>Checking the air</h1><p class="lead" role="status">Loading current air data…</p></div>';
   st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
+  st.wx=null;
+  const weather=jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`,5000).then(x=>x.current).catch(()=>null);
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
   try {
     const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5,pm10,nitrogen_dioxide,sulphur_dioxide&forecast_days=2&past_days=7&timezone=auto`);
@@ -48,15 +50,16 @@ async function load(p) {
     if (snap && snap.data) { st.data = snap.data; st.demo = false; st.stale = snap.at; banner('Offline. Showing the last saved reading from ' + new Date(snap.at).toLocaleString() + '.'); }
     else { st.data = demo(); st.demo = true; st.stale = null; banner('Live data is unavailable (' + e.message + '). Showing sample data.'); }
   }
-  try {
-    const w = (await jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`)).current;
-    if (seq !== loadSequence) return;
-    st.wx = { t: Math.round(w.temperature_2m), h: Math.round(w.relative_humidity_2m), w: Math.round(w.wind_speed_10m) };
-  } catch (_) { if (seq !== loadSequence) return; st.wx = null; }
   if (seq !== loadSequence) return;
   store.set('svasa_last', { p, profile: st.profile });
   $('v-today').classList.remove('loading');
-  render(); drawCities(); loadStation();
+  render(); loadStation();
+  if(location.hash==='#cities')drawCities();
+  const w=await weather;
+  if(seq!==loadSequence||!w||![w.temperature_2m,w.relative_humidity_2m,w.wind_speed_10m].every(Number.isFinite))return;
+  st.wx={t:Math.round(w.temperature_2m),h:Math.round(w.relative_humidity_2m),w:Math.round(w.wind_speed_10m)};
+  if(st.ctx)st.ctx.wx=st.wx;
+  drawDisp(); const chip=$('weatherchip');if(chip){chip.hidden=false;chip.textContent=st.wx.t+'°C · '+st.wx.h+'% · '+st.wx.w+' km/h';}
 }
 
 /* ---------- render ---------- */
@@ -71,7 +74,7 @@ function render() {
   const trendLabel = { rising: '↗ Worsening', falling: '↘ Improving', steady: '→ Steady' }[tr];
   $('hero').innerHTML =
     `<div class="ring" style="--p:0" role="img" aria-label="US AQI ${Math.round(aqi)}"><div><b>${Math.round(aqi)}</b><span>US AQI</span></div></div>
-     <div><p class="eyebrow">${esc(st.place.name)} · ${status} · ${esc(c.time.slice(11, 16))}</p>
+     <div><p class="eyebrow">${esc(st.place.name)} · ${status} · ${esc(c.time.replace('T',' '))}</p>
      <h1>${esc(b.label)}</h1>
      <p class="verdict">${esc(st.demo || st.stale ? 'Reference only · not current' : S.verdict(aqi, st.profile))}</p>
      <p class="lead">${esc(st.demo || st.stale ? 'Current guidance is unavailable.' : a.go)}${dom ? ' Main driver: ' + S.POLLUTANTS[dom].name + '.' : ''}${wn ? ' ' + esc(wn) : ''}</p>
@@ -80,7 +83,7 @@ function render() {
        <span class="chip2" title="Modelled estimate from Open-Meteo / CAMS, not a street monitor">Modelled data · Open-Meteo</span>
        ${ind ? `<span class="chip2" title="Partial model-based estimate using ${ind.pollutants.length} of eight pollutants, not official CPCB AQI">India scale (partial) ${ind.aqi} · ${esc(ind.label)}</span>` : ''}
        ${win ? `<span class="chip2">Cleanest ${win.start.slice(11, 16)}–${win.end.slice(11, 16)}</span>` : ''}
-       ${st.wx ? `<span class="chip2">${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h</span>` : ''}
+       <span class="chip2" id="weatherchip"${st.wx?'':' hidden'}>${st.wx?`${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h`: ''}</span>
        <button type="button" class="btn sm" id="goplan">Plan my day</button>
        <button type="button" class="btn ghost sm" id="share">Share</button>
      </div></div>`;
@@ -102,7 +105,7 @@ function render() {
   }).join('');
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
-  st.hrs = hrs; drawStrip(hrs); drawDisp(); drawChart(hrs, win); drawHistory(c);
+  st.hrs = hrs; drawStrip(hrs); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);drawHistory(c);}
   $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
   if (!st.demo && !st.stale) notifyCheck(aqi);
   renderFamily(); renderActivityTimes();
@@ -290,6 +293,8 @@ function show(v) {
   document.querySelectorAll('.view').forEach(s => { s.hidden = s.id !== 'v-' + v; });
   document.querySelectorAll('#nav button').forEach(b => b.setAttribute('aria-current', b.dataset.view === v ? 'page' : 'false'));
   if (history.replaceState) history.replaceState(null, '', '#' + v);
+  if(v==='hourly'&&st.data){drawChart(st.hrs||[],st.ctx?.window);drawHistory(st.data.current);}
+  if(v==='cities')drawCities();
   window.scrollTo(0, 0);
 }
 

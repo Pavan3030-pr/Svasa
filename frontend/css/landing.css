@@ -49,3 +49,5 @@ main{overflow-x:clip}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.js .reveal{opacity:1;transform:none}}
 
 :root{--bg:#edf2ed;--card:#f9fbf8;--line:#d3dfd5;--ink:#183b33;--mute:#50665e;--brand:#175b4b;--brand-d:#104437}body{background:var(--bg)}.lp-nav{background:#edf2edf2}.lp-eyebrow{letter-spacing:.08em}.lp-sub{font-size:clamp(17px,2vw,20px)}.lp-card{border-color:var(--line)}.lp-btn{border-radius:12px}.lp-hero h1{letter-spacing:-.05em}
+
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}h1,h2,.lp-logo{font-family:Georgia,'Times New Roman',serif}
