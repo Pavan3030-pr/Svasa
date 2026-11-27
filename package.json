@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node backend/server.js",
     "dev": "node backend/server.js",
-    "test": "node scripts/sync-styles.js --check && node tests/core.test.js && node tests/server.test.js && node tests/vercel.test.js && node tests/stations.test.js && node tests/reliability.test.js && node tests/day.test.js && node tests/grounding.test.js && node tests/ai-contract.test.js && node tests/methodology.test.js && node tests/push.test.js && node tests/capacity.test.js && node tests/sw.test.js",
-    "sync:styles": "node scripts/sync-styles.js"
+    "test": "node scripts/sync-landing.js --check && node scripts/sync-styles.js --check && node tests/core.test.js && node tests/server.test.js && node tests/vercel.test.js && node tests/stations.test.js && node tests/reliability.test.js && node tests/day.test.js && node tests/grounding.test.js && node tests/ai-contract.test.js && node tests/methodology.test.js && node tests/push.test.js && node tests/capacity.test.js && node tests/sw.test.js",
+    "sync:styles": "node scripts/sync-styles.js",
+    "sync:landing": "node scripts/sync-landing.js"
   },
   "engines": {
     "node": "26.x"

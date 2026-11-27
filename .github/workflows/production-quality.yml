@@ -1,0 +1,57 @@
+name: SVASA deployed quality and bounded capacity
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/production-quality.yml','tests/production-capacity.js']
+permissions:
+  contents: read
+jobs:
+  deployed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Wait for deployed commit
+        run: |
+          for attempt in $(seq 1 20); do
+            if curl -fsS https://svasa-sage.vercel.app/api/health | grep -q "$GITHUB_SHA"; then exit 0; fi
+            sleep 5
+          done
+          exit 1
+      - name: Bounded production capacity
+        run: node tests/production-capacity.js
+      - name: Install Lighthouse
+        run: npm install --no-save --package-lock=false lighthouse@13.6.0
+      - name: Audit deployed pages
+        run: |
+          mkdir -p deployed-quality-artifacts
+          export CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$CHROME_PATH"
+          for page in index app; do
+            for mode in mobile desktop; do
+              EXTRA=""
+              if [ "$mode" = desktop ]; then EXTRA="--preset=desktop"; fi
+              OUTPUT="deployed-quality-artifacts/$page-$mode.json"
+              for attempt in 1 2 3; do
+                rm -f "$OUTPUT"
+                if npx --no-install lighthouse "https://svasa-sage.vercel.app/$page.html" $EXTRA --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path="$OUTPUT" --quiet; then
+                  if node -e 'const r=require("./"+process.argv[1]);process.exit(r.runtimeError?1:0)' "$OUTPUT"; then break; fi
+                fi
+                if [ "$attempt" = 3 ]; then exit 1; fi
+                sleep 2
+              done
+            done
+          done
+          node -e "const fs=require('fs');for(const f of fs.readdirSync('deployed-quality-artifacts').filter(x=>x.endsWith('.json'))){const j=JSON.parse(fs.readFileSync('deployed-quality-artifacts/'+f));console.log(f,JSON.stringify(Object.fromEntries(Object.entries(j.categories).map(([k,v])=>[k,Math.round(v.score*100)]))));console.log('Metrics',JSON.stringify(Object.fromEntries(['first-contentful-paint','largest-contentful-paint','speed-index','total-blocking-time','cumulative-layout-shift'].map(k=>[k,j.audits[k]?.numericValue]))));}" | tee deployed-quality-artifacts/scores.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deployed-quality-and-capacity
+          path: |
+            deployed-quality-artifacts/
+            production-capacity-artifacts/
+          if-no-files-found: ignore

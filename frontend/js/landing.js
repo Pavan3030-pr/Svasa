@@ -18,11 +18,13 @@ function paintHero(aqi, win) {
 async function cityReading(c,i){
   try {const d=await get(URL_(c[1],c[2],i===0?'&hourly=us_aqi&forecast_days=2':''));const age=S.readingAge(d);if(age===null||age>3||age< -1||!S.band(d.current.us_aqi))return null;if(i===0)paintHero(d.current.us_aqi,S.bestWindow(S.hourlyFrom(d,d.current.time),2));return {name:c[0],aqi:d.current.us_aqi};}catch(_){return null;}
 }
-const heroReading=cityReading(CITIES[0],0);
+let heroReading=null;
+const loadHero=()=>heroReading||(heroReading=cityReading(CITIES[0],0));
+if('IntersectionObserver'in window){const heroObserver=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){heroObserver.disconnect();loadHero();}},{rootMargin:'160px'});heroObserver.observe($('hAqi'));}else loadHero();
 let started=false;
 async function run(){
   if(started)return;started=true;
-  const out=[await heroReading];
+  const out=[await loadHero()];
   // Limit concurrent provider requests to two and update the ticker once.
   for(let i=1;i<CITIES.length;i+=2)out.push(...await Promise.all(CITIES.slice(i,i+2).map((c,j)=>cityReading(c,i+j))));
   const ok=out.filter(x=>x&&S.band(x.aqi));
