@@ -1,43 +1,16 @@
-# Svasa – Urban Air Quality Assistant · PRD
+# SVASA 4 — Product requirements and implemented scope
 
-## 1. Problem
-Residents of polluted cities see an AQI number but not what to do. Generic apps ignore health context and hide the best time to go out.
+## Problem and user journey
+Air quality numbers alone do not tell residents when to commute, exercise or take precautions. SVASA uses current modelled air quality, health-profile preferences and forecasts to suggest practical decisions. It is a general-information tool, not a diagnostic service.
 
-## 2. Research summary
-- Open-Meteo Air Quality API (free, no key, CAMS model) exposes `us_aqi`, per-pollutant AQIs, PM2.5, PM10, NO₂, O₃, SO₂, CO, hourly 5-day forecast. Open-Meteo Geocoding API resolves city names.
-- Winning hackathon pattern for assistant challenges: one clear core loop (input → data → grounded advice), graceful failure, accessibility, and a visible "wow" insight. Svasa's insight is the cleanest 2-hour window plus profile-adjusted advice.
-- WHO 2021 24-hour guidelines used for pollutant comparison (PM2.5 15, PM10 45, NO₂ 25, O₃ 100 µg/m³).
+## Implemented product
+- Public landing page, city search and optional geolocation; current modelled US AQI, pollutant concentrations, nearby ground-station observations, partial India-scale model estimate and correctly labelled averaging periods.
+- Profile-aware guidance, 24-hour forecast and seven-day history, commute planner, multi-activity optimization with concentration-time proxy, family profiles and city comparison.
+- Five-language Gemini assistant grounded in independently verified model data, emergency bypass and deterministic topic-specific fallback during model failures. No clinical or native-speaker review is claimed.
+- PWA with offline snapshot and disabled stale planning, breathing guide, local alerts and optional daily background Web Push; local saved plans and voluntary feedback export.
 
-## 2b. Competitive analysis
-IQAir AirVisual, Plume Labs, AirNow, Google/Apple weather. Common expectations: a large colour-coded AQI, hourly forecast, 7-day view, city comparison and ranking, health recommendations, pollution alerts and history. Apps differ mainly by data source (monitors, sensors or modelled grids). Svasa uses a modelled grid and says so in the UI. Differentiators: profile-aware advice, cleanest-window planner, assistant with a safety layer, India NAQI view.
+## Architecture
+Static responsive HTML/CSS/JS on Vercel; shared pure logic in core.js; thin API handlers with Node backend, Open-Meteo/CAMS, OpenAQ, Gemini and optional Upstash Redis. Local server and container use the same route handlers. CSS and landing bundle are generated and checked in CI.
 
-## 3. Users
-Parents, asthma/heart patients, older adults, runners, commuters.
-
-## 4. Core features (MVP)
-1. City search with autocomplete + "Near me" geolocation.
-2. Live US AQI, category, dominant pollutant.
-3. Health-profile chips that shift severity one band for sensitive groups.
-4. Action cards: going out, exercise, mask, windows, purifier, symptom warning.
-5. 24-hour AQI chart with the cleanest 2-hour window highlighted.
-6. Pollutant breakdown vs WHO guideline.
-7. "Ask Svasa" grounded Q&A (rule-based, no hallucination).
-8. Copy-summary share, auto-refresh every 15 min, remembered location/profile.
-
-## 5. Non-functional
-- Light theme, WCAG AA contrast, keyboard operable, ARIA live regions, reduced motion.
-- No keys, no backend, single static deploy. All user input sanitised and HTML-escaped.
-- Offline/API failure: explicit message + sample data fallback.
-- Responsive to 360px.
-
-## 6. Architecture
-`core.js` pure logic (UMD, unit-tested in Node) → `index.html` UI/network. Zero dependencies.
-
-## 7. Success metrics
-Time to first advice < 3 s; 100% of pure-logic tests pass; no console errors; Lighthouse a11y ≥ 95.
-
-## 8. Risks
-Model estimates differ from ground monitors (disclosed in footer); medical advice (disclaimer; symptom escalation text).
-
-## 9. Roadmap
-Gemini-powered free-text answers grounded on the same context; PWA push alerts; multi-city compare.
+## Acceptance evidence
+Automated unit, mocked integration, real deployed Chromium and Lighthouse workflows provide timestamped evidence. Target 100 performance/accessibility/best practices/SEO on desktop/mobile; scores vary with environment. Physical-device push delivery, real-user validation, translation review and clinical review are separate requirements. A bounded capacity sample is not a stress test.

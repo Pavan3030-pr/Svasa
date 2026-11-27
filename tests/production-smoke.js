@@ -27,13 +27,13 @@ async function check(name,fn){try{out.checks[name]=await fn();}catch(e){out.chec
     const fields=['recommendation','reason','limitation'].map(k=>({field:k,script:typeof r.data.sections?.[k]==='string'&&script.test(r.data.sections[k])}));
     const evidence=Number.isFinite(r.data.evidence?.aqi)&&Number.isFinite(Date.parse(r.data.evidence?.observedAt))&&r.data.evidence?.source==='Open-Meteo / CAMS model';
     const live=r.status===200&&r.data.source==='gemini'&&fields.every(x=>x.script)&&evidence;
-    const fallback=r.status===200&&r.data.source==='rules'&&r.data.reason==='provider_rate_limit'&&fields.every(x=>x.script)&&evidence;
-    results.push({lang,status:r.status,source:r.data.source||null,reason:r.data.reason||null,fields,evidence,result:live?'live Gemini':fallback?'verified quota fallback':'fail'});
+    const fallback=r.status===200&&r.data.source==='rules'&&['provider_rate_limit','provider_network','provider_unavailable','provider_rejected','provider_unconfigured','invalid_model_response'].includes(r.data.reason)&&fields.every(x=>x.script)&&evidence;
+    results.push({lang,status:r.status,source:r.data.source||null,reason:r.data.reason||null,fields,evidence,result:live?'live Gemini':fallback?'verified provider fallback':'fail'});
    }catch(_){results.push({lang,result:'fail',reason:'Network or response parse failure'});}
   }
-  const usable=results.every(x=>x.result==='live Gemini'||x.result==='verified quota fallback'),live=results.every(x=>x.result==='live Gemini');
-  if(usable&&!live)console.log('::warning::Gemini quota limited; fallback was verified, live model evaluation remains incomplete.');
-  return {result:!usable?'fail':strictLive&&!live?'quota limited':'pass',providerEvaluation:live?'live verified':'incomplete due to provider quota',cases:results,scope:'Response schema, script, source and evidence; not clinical or translation-quality assessment'};
+  const usable=results.every(x=>x.result==='live Gemini'||x.result==='verified provider fallback'),live=results.every(x=>x.result==='live Gemini');
+  if(usable&&!live)console.log('::warning::Gemini unavailable; fallback was verified, live model evaluation remains incomplete.');
+  return {result:!usable?'fail':strictLive&&!live?'quota limited':'pass',providerEvaluation:live?'live verified':'incomplete due to provider availability or response validation',cases:results,scope:'Response schema, script, source and evidence; not clinical or translation-quality assessment'};
  });
  await check('schedulerAuthorization',async()=>{const r=await json('/api/push-dispatch');assert.equal(r.status,403);return {result:'pass'};});
  await check('stations',async()=>{if(!health?.stations)return {result:'not configured'};const r=await json('/api/stations?lat=17.385&lon=78.4867');assert.equal(r.status,200);const station=r.data.station;if(station){assert.ok(Number.isFinite(station.pm25)&&station.pm25>=0);assert.ok(Number.isFinite(Date.parse(station.time)));}return {result:'pass',stationAvailable:!!station,readingValid:station?true:null};});

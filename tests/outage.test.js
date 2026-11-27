@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),route=require('../backend/routes/ask'),g=require('../backend/lib/gemini');
+(async()=>{const now=new Date().toISOString().slice(0,16);process.env.GEMINI_API_KEY='fixture';let mode='invalid';let calls=0;
+global.fetch=async u=>{if(String(u).includes('air-quality-api'))return {ok:true,json:async()=>({current:{time:now,us_aqi:160,pm2_5:50},hourly:{time:[],us_aqi:[]}})};calls++;if(mode==='invalid')return {ok:true,json:async()=>({candidates:[{content:{parts:[{text:'invalid'}]}}]})};if(mode==='network')throw Error('network');return {ok:false,status:503};};
+const ask=lang=>route({method:'POST',headers:{'content-type':'application/json'},ip:'outage-fixture',body:{q:'Do I need a mask?',place:{lat:17,lon:78},ctx:{lang,profile:'general'}}});
+let r=await ask('en');assert.equal(r.body.reason,'invalid_model_response');assert.equal(r.body.source,'rules');assert.equal(calls,2);assert.match(r.body.sections.recommendation,/N95/);
+mode='network';r=await ask('te');assert.equal(r.body.reason,'provider_network');assert.match(r.body.sections.limitation,/[\u0c00-\u0c7f]/);const n=calls;r=await ask('ta');assert.equal(r.body.reason,'provider_network');assert.equal(calls,n);
+r=await route({method:'POST',headers:{'content-type':'application/json'},ip:'outage-fixture',body:{q:'I cannot breathe'}});assert.equal(r.body.source,'safety');assert.equal(calls,n);
+global.fetch=async()=>({ok:false,status:503});r=await route({method:'POST',headers:{'content-type':'application/json'},ip:'outage-fixture',body:{q:'mask?',place:{lat:1,lon:2}}});assert.equal(r.status,503);assert.equal(r.body.error,'Verified air data unavailable');console.log('Malformed model, network failure, cooldown, emergency and missing evidence tests passed');
+})().catch(e=>{console.error(e);process.exitCode=1;});

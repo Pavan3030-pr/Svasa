@@ -2,6 +2,8 @@
 const {createHash,timingSafeEqual,createECDH}=require('node:crypto');
 const guard=require('./guard'),air=require('./air-context');
 const INDEX='svasa:push:index',PREFIX='svasa:push:',TTL=30*86400;
+// Bound daily resource usage until load and provider quotas have been measured.
+const capacity=()=>{const n=Number(process.env.PUSH_MAX_SUBSCRIPTIONS||60);return Number.isInteger(n)&&n>=20&&n<=120?n:60;};
 function validVapid(publicKey,privateKey){
  try{const e=createECDH('prime256v1'),pub=Buffer.from(publicKey||'','base64url'),priv=Buffer.from(privateKey||'','base64url');if(pub.length!==65||priv.length!==32)return false;e.setPrivateKey(priv);return timingSafeEqual(pub,e.getPublicKey());}catch(_){return false;}
 }
@@ -25,8 +27,8 @@ async function redis(cmd){
 async function subscribe(body){
  const value=validate(body);if(!value)return 400;
  const id=digest(body.subscription.endpoint),key=PREFIX+id,record=JSON.stringify({...value,tokenHash:digest(body.token),last:null});
- const script="local old=redis.call('GET',KEYS[1]); if old and cjson.decode(old).tokenHash~=ARGV[1] then return -1 end; redis.call('ZREMRANGEBYSCORE',KEYS[2],'-inf',ARGV[2]); if not old and redis.call('ZCARD',KEYS[2])>=20 then return 0 end; redis.call('SET',KEYS[1],ARGV[3],'EX',ARGV[4]); redis.call('ZADD',KEYS[2],ARGV[5],ARGV[6]); return 1";
- const now=Math.floor(Date.now()/1000),n=await redis(['EVAL',script,'2',key,INDEX,digest(body.token),String(now),record,String(TTL),String(now+TTL),id]);
+ const script="local old=redis.call('GET',KEYS[1]); if old and cjson.decode(old).tokenHash~=ARGV[1] then return -1 end; redis.call('ZREMRANGEBYSCORE',KEYS[2],'-inf',ARGV[2]); if not old and redis.call('ZCARD',KEYS[2])>=tonumber(ARGV[7]) then return 0 end; redis.call('SET',KEYS[1],ARGV[3],'EX',ARGV[4]); redis.call('ZADD',KEYS[2],ARGV[5],ARGV[6]); return 1";
+ const now=Math.floor(Date.now()/1000),n=await redis(['EVAL',script,'2',key,INDEX,digest(body.token),String(now),record,String(TTL),String(now+TTL),id,String(capacity())]);
  return n===1?200:n===-1?403:503;
 }
 async function unsubscribe(body){
@@ -52,9 +54,12 @@ async function dispatch(deps={}){
  const webpush=deps.transport||require('web-push'),storage=deps.storage||redis,context=deps.context||air.verifiedContext;
  webpush.setVapidDetails(process.env.VAPID_SUBJECT,process.env.VAPID_PUBLIC_KEY,process.env.VAPID_PRIVATE_KEY);
  const now=Math.floor(Date.now()/1000);await storage(['ZREMRANGEBYSCORE',INDEX,'-inf',String(now)]);
- const ids=await storage(['ZRANGE',INDEX,'0','19']);let sent=0,errors=0;
  const lock=await storage(['SET',PREFIX+'dispatch-lock','1','NX','EX','300']);if(lock!=='OK')return {checked:0,sent:0,errors:0,busy:true};
- await Promise.all(ids.map(async id=>{
+ const ids=await storage(['ZRANGE',INDEX,'0',String(capacity()-1)]);let sent=0,errors=0,checked=0;
+ // Use a bounded worker pool instead of launching every upstream request together.
+ let cursor=0;const worker=async()=>{while(cursor<ids.length){const id=ids[cursor++];checked++;
+ await processOne(id);}};
+ async function processOne(id){
   try{
    const key=PREFIX+id,raw=await storage(['GET',key]);if(!raw){await storage(['ZREM',INDEX,id]);return;}
    const r=JSON.parse(raw);if(!validSubscription(r.subscription))return;
@@ -69,7 +74,8 @@ async function dispatch(deps={}){
    }
    await storage(['EVAL',"if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('SET',KEYS[1],ARGV[2],'KEEPTTL') end; return nil",'1',key,raw,JSON.stringify({...r,last:high})]);
   }catch(_){errors++;}
- }));
- return {checked:ids.length,sent,errors};
+ }
+ await Promise.all(Array.from({length:Math.min(12,ids.length)},worker));
+ return {checked,sent,errors};
 }
-module.exports={configured,validVapid,validSubscription,validate,subscribe,unsubscribe,authorized,dispatch,testDelivery};
+module.exports={capacity,configured,validVapid,validSubscription,validate,subscribe,unsubscribe,authorized,dispatch,testDelivery};

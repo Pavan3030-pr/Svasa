@@ -21,5 +21,9 @@ const testDeps={storage:async cmd=>cmd[0]==='GET'?JSON.stringify({...push.valida
 assert.equal(await push.testDelivery({endpoint:valid.endpoint,token:'b'.repeat(64)},testDeps),403);
 assert.equal(await push.testDelivery({endpoint:valid.endpoint,token:body.token},testDeps),200);
 assert.equal(await push.testDelivery({endpoint:valid.endpoint,token:body.token},testDeps),429);assert.equal(testSends,1);
-console.log('Web Push key validation, dispatch, deduplication and owned test delivery passed');
+assert.equal(push.capacity(),60);process.env.PUSH_MAX_SUBSCRIPTIONS='9999';assert.equal(push.capacity(),60);process.env.PUSH_MAX_SUBSCRIPTIONS='100';assert.equal(push.capacity(),100);delete process.env.PUSH_MAX_SUBSCRIPTIONS;
+const ids=Array.from({length:60},(_,i)=>'batch-'+i);let active=0,peak=0,total=0;
+const batchDeps={storage:async cmd=>{if(cmd[0]==='ZRANGE'){assert.equal(cmd[3],'59');return ids;}if(cmd[0]==='GET')return JSON.stringify({...push.validate(body),last:false});if(cmd[0]==='SET')return 'OK';return 1;},context:async()=>{active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,3));active--;return {aqi:180};},transport:{setVapidDetails(){},async sendNotification(){total++;}}};
+const batch=await push.dispatch(batchDeps);assert.equal(batch.checked,60);assert.equal(batch.sent,60);assert.equal(total,60);assert.ok(peak<=12);
+console.log('Web Push validation, 60-subscription bounded dispatch, deduplication and owned test delivery passed; fixture transport');
 })().catch(e=>{console.error(e);process.exitCode=1;});

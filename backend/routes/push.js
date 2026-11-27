@@ -8,7 +8,7 @@ module.exports=async function route(req){
   if(!push.configured())return R(200,{checked:0,sent:0,skipped:'Background push not configured'});
   try{return R(200,await push.dispatch());}catch(_){return R(503,{error:'Dispatch unavailable'});}
  }
- if(req.method==='GET')return R(200,{enabled:push.configured(),publicKey:push.configured()?process.env.VAPID_PUBLIC_KEY:null});
+ if(req.method==='GET')return R(200,{enabled:push.configured(),publicKey:push.configured()?process.env.VAPID_PUBLIC_KEY:null,subscriptionLimit:push.capacity()});
  if(req.method!=='POST')return R(405,{error:'GET or POST only'});
  if(!g.sameOrigin(req.headers)||!g.isJson(req.headers))return R(403,{error:'Invalid request origin or type'});
  if(g.tooBig(req.body))return R(413,{error:'Request too large'});

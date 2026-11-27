@@ -1,16 +1,14 @@
-# Security notes
-No system is provably unhackable. These are the controls in place and what is out of scope.
+# Security and operational limits
 
-**In place**
-- Strict CSP: `script-src 'self'` (no inline scripts, so injected script cannot run), `default-src 'none'`, `base-uri 'none'`, `object-src 'none'`, `frame-ancestors 'none'`.
-- All API/user text rendered with escaping or `textContent`; inputs sanitised and validated server-side (`validateCtx`).
-- Gemini key lives only in a server environment variable or Secret Manager; never sent to the browser.
-- `/api/ask`: same-origin check, JSON-only, 4 KB body cap, 20 req/min/IP, 20 concurrent upstream calls, 10 s upstream timeout, header and request timeouts, output length cap.
-- Prompt-injection hardening: user text is passed as data, the model is instructed to answer only from supplied air data; emergency phrases bypass the model.
-- File allowlist (no path traversal, no source leakage), HSTS, nosniff, no-referrer, COOP/CORP, Permissions-Policy, X-Frame-Options.
-- Zero runtime dependencies, so no supply-chain exposure from npm packages. Runs as non-root in Docker.
+SVASA is a health-adjacent decision aid, not a medical device or clinically validated service.
 
-**Out of scope / recommended for production**
-- Put Cloud Armor or a WAF in front for DDoS protection; the in-memory rate limiter is per instance.
-- Enable HTTPS only (Cloud Run does), rotate the key, set budget alerts, and monitor logs.
-- Commission a third-party penetration test before handling real users at scale.
+## Implemented controls
+- Server-side validation, JSON body size limit, same-origin checks, per-IP rate limiting with atomic Redis counters when configured, bounded upstream concurrency and timeouts.
+- Gemini uses independently fetched, fresh model data and a structured response contract. Emergency phrases bypass AI; unsupported output and provider failures fall back to limited, labelled guidance only with verified evidence.
+- Strict CSP with exact style hashes, no arbitrary inline scripts, frame denial, HSTS, nosniff, referrer and permissions policies. Secrets are server-side only.
+- Push endpoint host allowlist, ownership token hashes, bounded subscription capacity, 30-day expiry, authenticated daily dispatch, deduplication and test cooldown.
+- Family profiles, reports and optional feedback are local to the device. The assistant sends selected profile, coordinates, question and bounded conversation context to the server and model provider. Avoid submitting sensitive medical information.
+- The runtime has one direct npm dependency (web-push), not zero dependencies. Supply-chain exposure remains possible; run npm audit and review dependency changes.
+
+## Remaining limitations
+The per-instance AI cache and cooldown are not a distributed quota guarantee. Notification delivery, accessibility across assistive technologies, clinical and translation accuracy, large-scale load and penetration testing require independent verification. Do not infer safety or clinical outcomes from modelled AQI or a forecast exposure proxy. Rotate credentials and monitor provider quotas before expansion.

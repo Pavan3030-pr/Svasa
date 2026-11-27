@@ -23,7 +23,8 @@ const topicText={
 };
 const known=Object.freeze({mask:true,windows:true,time:true,child:true,pollutant:true,general:true});
 function intent(q){return patterns.find(([,re])=>re.test(String(q||'')))?.[0]||'general';}
-module.exports=(ctx,question)=>{
+const unavailableText={en:'AI is unavailable or its response could not be verified. This is limited rule-based guidance, not medical advice.',hi:'एआई उपलब्ध नहीं है या उत्तर सत्यापित नहीं हो सका। यह सीमित नियम आधारित मार्गदर्शन है, चिकित्सा सलाह नहीं।',te:'ఏఐ అందుబాటులో లేదు లేదా జవాబును ధృవీకరించలేకపోయాము. ఇది పరిమిత నియమ ఆధారిత సూచన, వైద్య సలహా కాదు.',ta:'ஏஐ கிடைக்கவில்லை அல்லது பதிலைச் சரிபார்க்க முடியவில்லை. இது வரையறுக்கப்பட்ட விதி சார்ந்த வழிகாட்டுதல், மருத்துவ ஆலோசனை அல்ல.',bn:'এআই উপলব্ধ নয় বা উত্তর যাচাই করা যায়নি। এটি সীমিত নিয়মভিত্তিক নির্দেশনা, চিকিৎসা পরামর্শ নয়।'};
+module.exports=(ctx,question,failure='provider_rate_limit')=>{
  const lang=Object.hasOwn(messages,ctx.lang)?ctx.lang:'en',m=messages[lang],topic=intent(question),high=S.effectiveLevel(ctx.aqi,ctx.profile)>=2,childHigh=S.effectiveLevel(ctx.aqi,'child')>=2;
  const dom=Object.hasOwn(S.POLLUTANTS,ctx.dominant)?S.POLLUTANTS[ctx.dominant].name:null;
  let recommendation=m[high?1:0],reason=m[2]+Math.round(ctx.aqi)+' (US AQI).';
@@ -39,6 +40,6 @@ module.exports=(ctx,question)=>{
    const entries=topicText[lang][topic];if(entries)recommendation=topic==='pollutant'?(dom?entries[0]+dom+'.':entries[0].split(/[:：]/)[0]+'.'):entries[(topic==='child'?childHigh:high)&&entries.length>1?1:0];
  }
  if(topic==='time'&&ctx.window&&typeof ctx.window.start==='string'&&typeof ctx.window.end==='string'&&Number.isFinite(ctx.window.avg))reason+=' '+ctx.window.start.slice(0,16).replace('T',' ')+'–'+ctx.window.end.slice(11,16)+' UTC (US AQI '+ctx.window.avg+').';
- return {kind:'air',recommendation,reason,limitation:m[3]};
+ return {kind:'air',recommendation,reason,limitation:failure==='provider_rate_limit'?m[3]:unavailableText[lang]};
 };
 module.exports.intent=intent;
