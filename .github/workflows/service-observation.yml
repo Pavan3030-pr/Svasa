@@ -1,0 +1,26 @@
+name: SVASA scheduled service observation
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: svasa-service-observation
+  cancel-in-progress: false
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - run: node scripts/production-observe.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: service-observation
+          path: service-observation-artifacts/
+          retention-days: 30
