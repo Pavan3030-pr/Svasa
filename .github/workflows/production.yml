@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['backend/**', 'api/**', 'frontend/**', 'tests/production-smoke.js', '.github/workflows/production.yml']
+    paths: ['package-lock.json','package.json','vercel.json','backend/**', 'api/**', 'frontend/**', 'tests/production-smoke.js', '.github/workflows/production.yml']
 permissions:
   contents: read
 jobs:
