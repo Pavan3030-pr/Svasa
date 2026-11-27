@@ -8,7 +8,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,3 +28,22 @@ jobs:
           curl -fsS http://localhost:8080/app.html > /tmp/app.html
           grep -q 'Svasa' /tmp/landing.html
           grep -q 'optimizeday' /tmp/app.html
+
+      - name: Install browser test dependencies
+        run: |
+          npm install --no-save --package-lock=false playwright@1.51.1
+          npx playwright install --with-deps chromium
+      - name: Desktop and mobile browser flows
+        run: |
+          node backend/server.js > /tmp/svasa-browser.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" || true' EXIT
+          curl --retry 10 --retry-connrefused --retry-delay 1 -fsS http://localhost:8080/api/health
+          node tests/browser.test.js
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: svasa-browser-screenshots
+          path: test-artifacts/
+          if-no-files-found: ignore
