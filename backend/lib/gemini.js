@@ -1,5 +1,6 @@
 'use strict';
 const S=require('../../frontend/js/core.js'),{createHash}=require('node:crypto'),guard=require('./guard');
+const intelligence=require('../../frontend/js/intelligence.js');
 const memo=new Map(),pending=new Map();let blockedUntil=0,blockedReason='provider_rate_limit';
 // Only generic, first-turn questions are memoized; no raw prompt or history is retained.
 const publicQuestions=new Set(['can i run outside?','do i need a mask?','best time to go out?','should i open windows?','is it safe for my child?','what is polluting the air?','what precautions should i consider for outdoor activity?','what precautions should i take outside?','can i walk?']);
@@ -20,6 +21,7 @@ function validateResponse(raw,ctx){
   if(/(?:guaranteed safe|completely safe|100% safe|stop (?:taking|using) your|double your dose)/i.test(text))return null;
   const permitted=new Set([Math.round(ctx.aqi),...(ctx.window?[ctx.window.avg]:[])]);
   for(const m of text.matchAll(/\bAQI\s*(?:is\s*|[:=]\s*)?(\d{1,4})\b/gi))if(!permitted.has(Number(m[1])))return null;
+  if(!intelligence.verifyText(x,ctx,S))return null;
   return {kind:'air',recommendation:x.recommendation.trim(),reason:x.reason.trim(),limitation:x.limitation.trim()};
 }
 async function generate(q,ctx){

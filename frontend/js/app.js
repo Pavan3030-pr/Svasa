@@ -33,9 +33,14 @@ const snapKey=p=>'svasa_snap_v2_'+Number(p.lat).toFixed(4)+','+Number(p.lon).toF
 function usableReading(d){return !!(d&&d.current&&S.band(d.current.us_aqi)&&typeof d.current.time==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.current.time)&&Number.isFinite(Date.parse(d.current.time+'Z')));}
 function usableSnapshot(s){return !!(s&&Number.isFinite(s.at)&&s.at>0&&s.at<=Date.now()+60000&&usableReading(s.data));}
 async function load(p) {
+  const sameCity=!!st.place&&st.place.lat===p.lat&&st.place.lon===p.lon;
+  const priorForecast=forecast();
+  const priorTimes=sameCity?(priorForecast.length?activities.map(a=>priorForecast[a.preferred]?.time||null):draftTimes):null;
+  draftTimes=priorTimes;
+  if(!sameCity)clearReview();
   const seq = ++loadSequence;historyReading=null;historyRequest=null;$('refreshair').disabled=true;$('refreshair').querySelector('span').textContent='Refreshing…';
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
-  st.ctx = null; st.data = null; renderRail(null,[],null); invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
+  st.ctx = null; st.data = null; latestStation=null; renderTrust(); renderReview(); renderRail(null,[],null); invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
   $('aqiring').classList.add('loadingring');$('aqiring').setAttribute('aria-label','Air quality loading');$('aqiring').style.setProperty('--p',0);$('aqivalue').textContent='—';renderScale(null,false);$('stripnote').textContent='Loading forecast…';$('aqimeta').textContent='Retrieving model data';$('aqiverdict').textContent='Checking the air';$('aqilead').textContent='Loading current air data…';$('aqichips').innerHTML='<span class="chip2">Modelled data · Open-Meteo</span>';$('goplan').disabled=true;$('share').disabled=true;
   $('adv').textContent='Loading current guidance…';$('alert').textContent='';$('pol').textContent='Loading pollutant readings…';$('strip').textContent='Loading hourly forecast…';$('win').textContent='Loading forecast…';$('chart').textContent='';$('hist').textContent='';$('histtxt').textContent='Loading history…';$('disp').textContent='';st.hrs=[];
@@ -57,6 +62,7 @@ async function load(p) {
   if (seq !== loadSequence) return;
   store.set('svasa_last', { p, profile: st.profile });
   $('v-today').classList.remove('loading');
+  if(priorTimes&&forecast().length){const newHours=forecast();activities.forEach((a,i)=>{a.preferred=priorTimes[i]?newHours.findIndex(h=>h.time===priorTimes[i]):-1;});}
   render();$('refreshair').disabled=false;$('refreshair').querySelector('span').textContent='Refresh air';loadStation();
   if(location.hash==='#cities')drawCities();
   const w=await jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`,5000).then(x=>x.current).catch(()=>null);
@@ -109,7 +115,7 @@ function render() {
   renderRail(c,hrs,win);st.hrs = hrs; drawStrip(hrs,win); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);loadHistory();}
   $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Modelled AQI ${Math.round(aqi)}: choose a comfortable, cleaner indoor space with safe ventilation and temperature. Stop if dizzy or breathless.` : `Modelled AQI ${Math.round(aqi)}: practise gently if comfortable. Stop if dizzy or breathless; this is not treatment.`;
   if (!st.demo && !st.stale) notifyCheck(aqi);
-  if(location.hash==='#family')renderFamily(); if(location.hash==='#plan')renderActivityTimes();
+  renderTrust(); if(location.hash==='#family')renderFamily(); if(location.hash==='#plan')renderActivityTimes(); renderReview();
 }
 // Decision rail uses the current verified model forecast, no extra provider requests.
 function renderRail(c,hrs,win){
@@ -206,6 +212,7 @@ async function loadStation() {
   } catch (_) {if(st.place===p)$('gs').textContent='Station service unavailable. Showing model estimates only.';}
 }
 function drawStation(s) {
+  latestStation=s;renderTrust();
   const gc = $('gcard'), c = st.data.current; gc.hidden = false;
   if (!s || !Number.isFinite(s.pm25) || s.pm25<0) { $('gs').innerHTML = '<p class="muted" style="margin:0">No monitoring station reporting PM2.5 within 25 km. Showing the model estimate only.</p>'; return; }
   const model = c.pm2_5, diff = s.pm25 > 0 && typeof model === 'number' ? Math.round((model - s.pm25) / s.pm25 * 100) : null;
@@ -350,7 +357,7 @@ function show(v) {
   if(v==='cities')drawCities();
   if(v==='family')renderFamily();
   if(v==='ask')refreshAIMode();
-  if(v==='plan')renderActivityTimes();
+  if(v==='plan'){renderActivityTimes();renderReview();}
   window.scrollTo(0, 0);
 }
 
@@ -413,27 +420,55 @@ $('onb').hidden = !!store.get('svasa_onb', 0);
 
 /* ---------- personal day and family ---------- */
 let currentPlan=null,decisionPlans=null;
+
+const I=window.SvasaIntelligence;
+let reviewSnapshot=null,latestStation=null,draftTimes=null;
+const cityKey=()=>st.place?st.place.lat+','+st.place.lon:'';
+const metric=v=>Number.isFinite(v)?v.toFixed(1)+' µg·h/m³':'Unavailable';
+const fmtTime=t=>t?t.replace('T',' '):'Unavailable';
+function renderTrust(){
+ const el=$('airtrust'),r=I.trust({fresh:!!st.data&&!st.demo&&!st.stale,model:st.data?.current?.pm2_5,station:latestStation,hours:forecast()});
+ el.innerHTML='<p class="section-kicker">AIRTRUST / EVIDENCE QUALITY</p><h3>'+esc(r.label)+'</h3><div class="decisionbaseline"><div><small>Usable forecast hours</small><strong>'+r.coverage+' / 24</strong></div><div><small>Model PM2.5</small><strong>'+esc(r.model===null?'Unavailable':r.model.toFixed(1)+' µg/m³')+'</strong></div><div><small>Comparable station PM2.5</small><strong>'+esc(r.station===null?'Unavailable':r.station.toFixed(1)+' µg/m³')+'</strong></div></div><p class="muted">'+esc(r.detail)+'</p>';
+}
+function renderFutures(items,plan){
+ const el=$('parallelfutures'),r=I.compare(forecast(),items,plan,S,st.profile);el.hidden=!r;if(!r)return;
+ el.innerHTML='<p class="section-kicker">PARALLEL FUTURES / SAME ACTIVITIES, TWO OUTCOMES</p><h3>Your routine vs optimized routine</h3><div class="decisionbaseline"><div><small>Preferred routine</small><strong>'+esc(metric(r.baseline))+'</strong></div><div><small>Optimized routine</small><strong>'+esc(metric(r.optimized))+'</strong></div><div><small>Projected change</small><strong>'+esc(r.pct===null?'Unavailable':Math.abs(r.pct).toFixed(1)+'% '+(r.pct>=0?'lower':'higher'))+'</strong></div></div>'+r.rows.map(x=>'<div class="scheduleitem"><strong>'+esc(x.name)+(x.fixed?' · Fixed':'')+'</strong><span>Original: '+esc(fmtTime(x.before?.start))+' · '+esc(metric(x.before?.exposure))+'</span><span>Optimized: '+esc(fmtTime(x.after.start))+' · '+esc(metric(x.after.exposure))+'</span><small>'+ (x.after.caution?'Consider an indoor alternative.':'Lower concern, not risk-free.')+'</small></div>').join('')+'<p class="foot">Same activity durations; outdoor PM2.5 concentration × hours. Not inhaled dose or measured exposure. An overlapping or incomplete baseline is not compared.</p>';
+}
+function clearReview(){reviewSnapshot=null;$('adaptiveday').hidden=true;}
+function renderReview(){
+ const el=$('adaptiveday');if(!reviewSnapshot){el.hidden=true;return;}
+ const r=I.revise(reviewSnapshot,forecast(),S,cityKey(),st.profile);if(r.state==='different-context'){clearReview();return;}el.hidden=false;
+ const copy={unavailable:'Fresh data unavailable. No revised plan can be proposed.',expired:'A preferred time is outside the updated forecast. Review your activities manually.',infeasible:'No feasible schedule with complete data. Review your constraints.',changed:'A new proposal is available. Fixed commitments are preserved; review before accepting.',unchanged:'The previous proposal remains optimal under the selected priority.'};
+ el.innerHTML='<p class="section-kicker">ADAPTIVE DAY / FORECAST REVIEW</p><h3>'+esc(r.state==='changed'?'Your forecast changed':'Review your schedule')+'</h3><p>'+esc(copy[r.state]||'')+'</p>'+(r.proposal?'<div class="decisionbaseline"><div><small>Previous proposal on new forecast</small><strong>'+esc(metric(r.prior))+'</strong></div><div><small>New proposal</small><strong>'+esc(metric(r.proposal.exposure))+'</strong></div></div><button type="button" class="btn ghost" id="reviewrevised">Review with latest forecast</button>':'');
+ const button=$('reviewrevised');if(button)button.onclick=()=>{const policy=reviewSnapshot.policy;activities=r.items.map(a=>({name:a.name,duration:a.duration,preferred:a.preferred,flex:a.flex}));renderActivityTimes();$('optimizeday').click();if(decisionPlans)chooseDecision(policy);};
+}
+function renderFamilyWindow(){
+ const el=$('familywindow'),r=I.familyWindow(forecast(),family,S);
+ if(!r){el.textContent=family.length?'Fresh complete forecast required for a shared window.':'Add family profiles to find a shared lower-pollution window.';return;}
+ el.innerHTML='<p class="section-kicker">SHARED FAMILY WINDOW</p><h3>'+esc(fmtTime(r.slot.start))+' – '+esc(fmtTime(r.slot.end))+'</h3><p>US AQI '+Math.round(r.slot.peak)+' · '+r.count+' of '+r.guidance.length+' profiles need caution.</p>'+r.guidance.map(x=>'<div class="scheduleitem"><strong>'+esc(x.name)+'</strong><span>'+esc(x.advice)+'</span></div>').join('')+'<p class="foot">Ranks one-hour windows by the number of profiles needing caution, then PM2.5 and AQI. Individual schedules may differ. Not a risk-free recommendation.</p>';
+}
+
 let activities=[{name:'Commute',duration:1,preferred:0,flex:2}];
 let family=store.get('svasa_family',[]);
 if(!Array.isArray(family))family=[];
 family=family.filter(x=>x&&typeof x.name==='string'&&Object.hasOwn(S.PROFILES,x.profile)).slice(0,6);
 const forecast=()=>st.data&&!st.demo&&!st.stale?S.hourlyFrom(st.data,st.data.current.time):[];
-function invalidatePlan(){currentPlan=null;decisionPlans=null;$('saveplan').disabled=true;$('decisionchoices').hidden=true;}
+function invalidatePlan(){currentPlan=null;decisionPlans=null;$('saveplan').disabled=true;$('decisionchoices').hidden=true;$('parallelfutures').hidden=true;}
 function renderActivityTimes(){
   invalidatePlan();
   const hrs=forecast(), box=$('activities');
   box.innerHTML=activities.map((x,i)=>{
-    const choices=hrs.map((t,j)=>'<option value="'+j+'"'+(j===x.preferred?' selected':'')+'>'+esc(t.time.replace('T',' '))+'</option>').join('');
+    const choices=(x.preferred<0?'<option value="-1" selected>Choose a new preferred time</option>':'')+hrs.map((t,j)=>'<option value="'+j+'"'+(j===x.preferred?' selected':'')+'>'+esc(t.time.replace('T',' '))+'</option>').join('');
     return '<div class="activityrow"><label>Activity<select data-field="name" data-i="'+i+'">'+['Commute','Walk','Workout','School','Shopping','Other'].map(n=>'<option'+(x.name===n?' selected':'')+'>'+n+'</option>').join('')+'</select></label><label>Preferred start<select data-field="preferred" data-i="'+i+'"'+(!hrs.length?' disabled':'')+'>'+(choices||'<option>Forecast unavailable</option>')+'</select></label><label>Hours<select data-field="duration" data-i="'+i+'">'+[1,2,3,4].map(n=>'<option'+(x.duration===n?' selected':'')+'>'+n+'</option>').join('')+'</select></label><label>Flexibility<select data-field="flex" data-i="'+i+'">'+[0,1,2,4,6].map(n=>'<option value="'+n+'"'+(x.flex===n?' selected':'')+'>'+ (n?'±'+n+'h':'Fixed')+'</option>').join('')+'</select></label><button type="button" class="btn ghost sm" data-remove="'+i+'" aria-label="Remove activity '+(i+1)+'">Remove</button></div>';
   }).join('');
   const best=S.bestWindow(hrs,2);$('planwindowhint').hidden=!best;$('planwindowtext').textContent=best?best.start.replace('T',' ')+' – '+best.end.replace('T',' ')+' · mean US AQI '+best.avg+'. Forecast, not a guarantee of safety.':'';
   $('addactivity').disabled=activities.length>=4;
   $('optimizeday').disabled=!hrs.length||!activities.length;
 }
-$('applywindow').onclick=()=>{const best=S.bestWindow(forecast(),2);if(!best)return;if(!activities.length)activities.push({name:'Walk',duration:2,preferred:best.index,flex:0});else Object.assign(activities[0],{duration:2,preferred:best.index,flex:0});renderActivityTimes();$('dayresult').textContent='Suggested window applied to first activity. Optimize to check the complete schedule.';};
-$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);invalidatePlan();$('dayresult').textContent='Plan changed. Optimize again.';};
-$('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)return;activities.splice(Number(b.dataset.remove),1);renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
-$('addactivity').onclick=()=>{if(activities.length>=4)return;activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
+$('applywindow').onclick=()=>{clearReview();const best=S.bestWindow(forecast(),2);if(!best)return;if(!activities.length)activities.push({name:'Walk',duration:2,preferred:best.index,flex:0});else Object.assign(activities[0],{duration:2,preferred:best.index,flex:0});renderActivityTimes();$('dayresult').textContent='Suggested window applied to first activity. Optimize to check the complete schedule.';};
+$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;clearReview();activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);invalidatePlan();$('dayresult').textContent='Plan changed. Optimize again.';};
+$('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)return;clearReview();activities.splice(Number(b.dataset.remove),1);renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
+$('addactivity').onclick=()=>{if(activities.length>=4)return;clearReview();activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('optimizeday').onclick=()=>{
   const hrs=forecast(),items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
   invalidatePlan();const exposure=S.optimizeDay(hrs,items,st.profile,'exposure'),routine=S.optimizeDay(hrs,items,st.profile,'routine');
@@ -446,7 +481,9 @@ $('optimizeday').onclick=()=>{
 function chooseDecision(policy){
   if(!decisionPlans||!forecast().length)return;const plan=decisionPlans[policy],items=decisionPlans.items;if(!plan)return;
   for(const k of ['exposure','routine'])$('decision'+k).setAttribute('aria-pressed',String(policy===k));
-  currentPlan={createdAt:new Date().toISOString(),city:st.place.name,profile:st.profile,policy,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
+  reviewSnapshot=I.capture(items,plan,forecast(),cityKey(),st.profile,policy);$('adaptiveday').hidden=true;
+  renderFutures(items,plan);
+  currentPlan={createdAt:new Date().toISOString(),completed:false,city:st.place.name,profile:st.profile,policy,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
   const change=plan.changePct==null?'Original schedule unavailable or overlapping.':(plan.changePct>=0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
   const moved=plan.slots.map((x,i)=>{const delta=x.index-items[i].preferred;return '<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>'+ (items[i].flex===0?'Fixed commitment · ':delta===0?'Unchanged · ':Math.abs(delta)+'h '+(delta<0?'earlier':'later')+' · ')+'Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>';}).join('');
   const baseline=plan.baseline===null?'Preferred schedule unavailable':plan.baseline.toFixed(1)+' µg·h/m³';
@@ -454,6 +491,7 @@ function chooseDecision(policy){
 }
 $('decisionexposure').onclick=()=>chooseDecision('exposure');$('decisionroutine').onclick=()=>chooseDecision('routine');
 function renderFamily(){
+  renderFamilyWindow();
   const box=$('familyresults'), live=st.data&&!st.demo&&!st.stale;
   box.innerHTML=family.length?family.map((x,i)=>'<article class="familymember"><p class="section-kicker">'+esc(S.PROFILES[x.profile].name)+'</p><h3>'+esc(x.name)+'</h3><p>'+esc(live?S.advice(st.data.current.us_aqi,x.profile).go:'Fresh data required for current advice.')+'</p><button type="button" class="btn ghost sm" data-family-use="'+i+'">Use profile</button> <button type="button" class="btn ghost sm" data-family-remove="'+i+'">Remove</button></article>').join(''):'<p class="muted">Add a profile to see personalized guidance here.</p>';
 }
