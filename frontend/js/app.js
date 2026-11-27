@@ -88,7 +88,7 @@ function render() {
        <button type="button" class="btn sm" id="goplan">Plan my day</button>
        <button type="button" class="btn ghost sm" id="share">Share</button>
      </div></div>`;
-  const ring = $('hero').querySelector('.ring'); requestAnimationFrame(() => requestAnimationFrame(() => ring && ring.style.setProperty('--p', Math.min(100, aqi / 3))));
+  const ring = $('hero').querySelector('.ring'); if(ring)ring.style.setProperty('--p',Math.min(100,aqi/3));
   $('goplan').onclick = () => show('plan');
   $('share').onclick = async () => {
     const t = `${st.place.name} (${status}): AQI ${Math.round(aqi)} (${b.label}). ${st.demo || st.stale ? 'Reference only.' : a.go} via Svasa`;
@@ -109,7 +109,7 @@ function render() {
   st.hrs = hrs; drawStrip(hrs); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);drawHistory(c);}
   $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
   if (!st.demo && !st.stale) notifyCheck(aqi);
-  renderFamily(); renderActivityTimes();
+  if(location.hash==='#family')renderFamily(); if(location.hash==='#plan')renderActivityTimes();
 }
 function drawChart(h, win) {
   if (!h.length) { $('chart').innerHTML = '<p class="muted">No hourly forecast available.</p>'; return; }
@@ -298,6 +298,8 @@ function show(v) {
   if (history.replaceState) history.replaceState(null, '', '#' + v);
   if(v==='hourly'&&st.data){drawChart(st.hrs||[],st.ctx?.window);drawHistory(st.data.current);}
   if(v==='cities')drawCities();
+  if(v==='family')renderFamily();
+  if(v==='plan')renderActivityTimes();
   window.scrollTo(0, 0);
 }
 
@@ -391,7 +393,7 @@ $('familyprofile').innerHTML=Object.entries(S.PROFILES).map(([k,v])=>'<option va
 $('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value.trim(),profile=$('familyprofile').value;if(!name||family.length>=6||!Object.hasOwn(S.PROFILES,profile)){banner('Add a nickname; up to six profiles are supported.');return;}family.push({name,profile});store.set('svasa_family',family);$('familyname').value='';renderFamily();};
 $('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){family.splice(Number(b.dataset.familyRemove),1);store.set('svasa_family',family);renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;st.profile=x.profile;$('profile').value=x.profile;if(st.data)render();show('today');}};
 $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderFamily();};
-renderActivityTimes();renderFamily();
+// Populate non-visible feature views only when opened.
 
 let reports=store.get('svasa_reports',[]);
 if(!Array.isArray(reports))reports=[];

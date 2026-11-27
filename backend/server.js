@@ -1,11 +1,13 @@
 'use strict';
 // Local / container server: serves frontend/ and the same API handlers used on Vercel.
-const http = require('http'), fs = require('fs'), path = require('path');
+const http = require('http'), fs = require('fs'), path = require('path'), zlib=require('node:zlib');
 const ask = require('./routes/ask'), stations = require('./routes/stations'), health = require('./routes/health'), g = require('./lib/guard');
 const FRONT = path.resolve(__dirname, '../frontend');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://*.open-meteo.com https://api.bigdatacloud.net; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'";
 const HEAD = { 'Content-Security-Policy': CSP, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Strict-Transport-Security': 'max-age=63072000; includeSubDomains', 'Permissions-Policy': 'geolocation=(self), camera=(), microphone=(), payment=()', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'same-origin', 'Cache-Control': 'no-cache' };
+const staticCache=new Map();
+function staticAsset(file){const stat=fs.statSync(file),old=staticCache.get(file);if(old&&old.mtime===stat.mtimeMs)return old;const raw=fs.readFileSync(file),type=MIME[path.extname(file)],compressible=/^(text\/|application\/json|image\/svg\+xml)/.test(type),gz=compressible&&raw.length>=1024?zlib.gzipSync(raw):null;const v={mtime:stat.mtimeMs,raw,gz,type};staticCache.set(file,v);return v;}
 function send(res, code, body, type, extra) {
   res.writeHead(code, Object.assign({ 'Content-Type': type || 'application/json' }, HEAD, extra || {}));
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
@@ -41,7 +43,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET') {
       let f; try { f = path.resolve(FRONT, '.' + decodeURIComponent(url === '/' ? '/index.html' : url)); } catch (_) { return send(res, 400, { error: 'Bad request' }); }
-      if (f.startsWith(FRONT + path.sep) && MIME[path.extname(f)] && fs.existsSync(f) && fs.statSync(f).isFile()) return send(res, 200, fs.readFileSync(f), MIME[path.extname(f)]);
+      if (f.startsWith(FRONT + path.sep) && MIME[path.extname(f)] && fs.existsSync(f) && fs.statSync(f).isFile()) {const asset=staticAsset(f),gzip=asset.gz&&/(?:^|,\s*)gzip(?:\s*;\s*q=(?!0(?:\.0*)?(?:,|$))[^,]+)?(?:,|$)/i.test(req.headers['accept-encoding']||'');return send(res,200,gzip?asset.gz:asset.raw,asset.type,{Vary:'Accept-Encoding',...(gzip?{'Content-Encoding':'gzip'}:{})});}
     }
     send(res, 404, { error: 'Not found' });
   } catch (e) { send(res, 500, { error: 'Server error' }); }

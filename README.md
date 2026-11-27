@@ -101,3 +101,5 @@ Run `npm install` and `npx web-push generate-vapid-keys` locally. Set server-onl
 Production smoke verification runs against the public deployment and records the health/build status, emergency path and configured real Gemini and OpenAQ responses. An unconfigured provider is reported as such, not counted as a live integration pass. The push configuration check is not proof of delivery.
 
 The browser checks provider configuration before requesting optional station data or Gemini. Missing credentials are displayed as a disabled capability, not repeatedly requested as failing endpoints. The station panel also rejects invalid measurement values.
+
+Mobile performance improvements defer script execution, keep the AQI summary visible, remove unnecessary animations, load below-fold city readings on proximity and compress static responses in the local server. Optional views populate when opened. Standard Lighthouse throttling remains unchanged.

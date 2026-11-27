@@ -29,7 +29,7 @@ async function stub(page){
     const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block',acceptDownloads:true});
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await stub(page);
     await page.goto(origin+'/');await page.waitForFunction(()=>document.querySelector('#hAqi').textContent==='112');
-    await page.screenshot({path:'test-artifacts/landing-desktop.png',fullPage:true});await accessibility(page,'landing');
+    await page.locator('#ticker').scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelector('#ticker').textContent.includes('112'));await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-artifacts/landing-desktop.png',fullPage:true});await accessibility(page,'landing');
     await page.goto(origin+'/app.html');await page.waitForFunction(()=>document.querySelector('#hero').textContent.includes('112'));
     if(await page.locator('#onbskip').isVisible())await page.locator('#onbskip').click();
     await page.waitForFunction(()=>document.querySelector('#gs').textContent.includes('Fixture monitor'));

@@ -1,4 +1,4 @@
-const C = 'svasa-v19', A = ['./', 'index.html', 'app.html', 'css/styles.css', 'css/landing.css', 'js/core.js', 'js/app.js', 'js/landing.js', 'manifest.json', 'icon.svg'];
+const C = 'svasa-v20', A = ['./', 'index.html', 'app.html', 'css/styles.css', 'css/landing.css', 'js/core.js', 'js/app.js', 'js/landing.js', 'manifest.json', 'icon.svg'];
 self.addEventListener('install', e => e.waitUntil(caches.open(C).then(c => c.addAll(A))));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x.startsWith('svasa-') && x !== C).map(x => caches.delete(x))))));
 self.addEventListener('fetch', e => {

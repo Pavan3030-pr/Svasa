@@ -138,3 +138,6 @@ a.logo{text-decoration:none}
 
 /* Stable geometry during asynchronous provider updates. */
 .banner{min-height:70px;display:flex;align-items:center;margin-top:14px}.banner.neutral{background:#eaf3ec;border-color:#d4e1d9;color:#34584a}.hero{min-height:330px;align-content:center}.hero .chips-row{min-height:46px}.loading{opacity:1}#gcard{min-height:160px}#strip{min-height:88px}.citypill{flex:0 0 175px}.top .sel select{min-width:150px}@media(max-width:900px){.citypill{flex:1 1 0}.banner{min-height:90px}.hero{min-height:360px}}@media(max-width:620px){.hero{min-height:470px;align-content:center}.hero .ring{margin:0 auto}.hero .lead{min-height:48px}.hero .eyebrow{min-height:24px}#gcard{min-height:180px}.banner{margin-top:12px}}
+
+/* Compact above-the-fold mobile layout without hiding the source or status. */
+.ring{transition:none}.hero{transition:none}.top{backdrop-filter:none} @media(max-width:620px){.banner{min-height:64px;padding:8px 12px;font-size:13px}.hero{min-height:360px;gap:16px;padding:18px}.hero .ring{width:128px;height:128px}.hero .ring>div{width:104px;height:104px}.hero .ring b{font-size:40px}.hero .lead{min-height:42px}.hero .eyebrow{min-height:20px}.hero h1{font-size:30px}.hero .chips-row{margin-top:8px}}

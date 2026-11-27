@@ -54,3 +54,6 @@ main{overflow-x:clip}
 
 /* Static editorial artwork avoids continuous main-thread animation work. */
 .lp-orb i,.lp-orb .core,.lp-float{animation:none}.lp-ticker{min-height:112px}.tk{min-height:108px}@media(max-width:900px){.lp-ticker{min-height:348px}}
+
+/* Avoid rendering offscreen editorial sections until they approach the viewport. */
+@media(max-width:900px){.lp-scene{contain:layout paint}.lp-hero{gap:24px}.lp-copy h1{margin:12px 0}.lp-ticker{contain:layout paint}}
