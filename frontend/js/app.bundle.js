@@ -482,7 +482,7 @@ async function load(p) {
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
   st.ctx = null; st.data = null; renderRail(null,[],null); invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
-  $('aqiring').classList.add('loadingring');$('aqiring').setAttribute('aria-label','Air quality loading');$('aqiring').style.setProperty('--p',0);$('aqivalue').textContent='—';$('aqimeta').textContent='Retrieving model data';$('aqiverdict').textContent='Checking the air';$('aqilead').textContent='Loading current air data…';$('aqichips').innerHTML='<span class="chip2">Modelled data · Open-Meteo</span>';$('goplan').disabled=true;$('share').disabled=true;
+  $('aqiring').classList.add('loadingring');$('aqiring').setAttribute('aria-label','Air quality loading');$('aqiring').style.setProperty('--p',0);$('aqivalue').textContent='—';renderScale(null,false);$('stripnote').textContent='Loading forecast…';$('aqimeta').textContent='Retrieving model data';$('aqiverdict').textContent='Checking the air';$('aqilead').textContent='Loading current air data…';$('aqichips').innerHTML='<span class="chip2">Modelled data · Open-Meteo</span>';$('goplan').disabled=true;$('share').disabled=true;
   $('adv').textContent='Loading current guidance…';$('alert').textContent='';$('pol').textContent='Loading pollutant readings…';$('strip').textContent='Loading hourly forecast…';$('win').textContent='Loading forecast…';$('chart').textContent='';$('hist').textContent='';$('histtxt').textContent='Loading history…';$('disp').textContent='';st.hrs=[];
   st.place = p; pushRecent(p);renderSavedPlaces(); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   st.wx=null;
@@ -526,7 +526,7 @@ function render() {
   const status = st.demo ? 'Sample data' : st.stale ? 'Offline snapshot' : 'Live';
   const trendLabel = { rising: '↗ Worsening', falling: '↘ Improving', steady: '→ Steady' }[tr];
   const ring=$('aqiring');ring.classList.remove('loadingring');ring.setAttribute('aria-label','US AQI '+Math.round(aqi));ring.style.setProperty('--p',Math.min(100,aqi/3));$('aqivalue').textContent=Math.round(aqi);
-  $('aqimeta').textContent=st.place.name+' · '+status+' · '+c.time.replace('T',' ');
+  $('aqimeta').textContent=st.place.name+' · '+status+' · '+c.time.replace('T',' ');renderScale(b,!st.demo&&!st.stale);
   $('aqiverdict').textContent=b.label+' · '+(st.demo||st.stale?'Reference only · not current':S.verdict(aqi,st.profile));
   // Keep the immediate decision concise; the detailed advice is available in the tiles below.
   $('aqilead').textContent=st.demo||st.stale?'Current guidance is unavailable.':a.go;
@@ -551,7 +551,7 @@ function render() {
   }).join('')||'<p class="muted">No modelled pollutant concentrations available.</p>';
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
-  renderRail(c,hrs,win);st.hrs = hrs; drawStrip(hrs); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);loadHistory();}
+  renderRail(c,hrs,win);st.hrs = hrs; drawStrip(hrs,win); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);loadHistory();}
   $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
   if (!st.demo && !st.stale) notifyCheck(aqi);
   if(location.hash==='#family')renderFamily(); if(location.hash==='#plan')renderActivityTimes();
@@ -582,7 +582,7 @@ function renderSavedPlaces(){
 }
 $('railsave').onclick=()=>{if(!st.place||savedPlaces.length>=5||savedPlaces.some(x=>samePlace(x,st.place)))return;const next=[...savedPlaces,{name:st.place.name,lat:st.place.lat,lon:st.place.lon}];if(!store.set('svasa_saved_places',next)){$('railplacestatus').textContent='Could not save on this device.';return;}savedPlaces=next;renderSavedPlaces();$('railplacestatus').textContent='City saved on this device.';inbox?.emit('Location saved','Open your saved locations from Today.','today');};
 $('railplaces').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.place!==undefined){const place=savedPlaces[Number(b.dataset.place)];if(place){load(place);show('today');}}else if(b.dataset.unsave!==undefined){const next=savedPlaces.filter((_,i)=>i!==Number(b.dataset.unsave));if(store.set('svasa_saved_places',next)){savedPlaces=next;renderSavedPlaces();$('railplacestatus').textContent='Location removed.';}else $('railplacestatus').textContent='Could not remove location.';}};
-$('railplan').onclick=()=>show('plan');$('railforecast').onclick=()=>show('hourly');$('railcompare').onclick=()=>show('cities');
+$('railplan').onclick=()=>{show('plan');$('planwindowhint').scrollIntoView({block:'nearest'});};$('railforecast').onclick=()=>show('hourly');$('railcompare').onclick=()=>show('cities');
 function drawChart(h, win) {
   if (!h.length) { $('chart').innerHTML = '<p class="muted">No hourly forecast available.</p>'; return; }
   const L = 34, W = Math.max(680, h.length * 26 + L + 8), H = 220, top = 18, base = H - 28;
@@ -613,10 +613,16 @@ function drawHistory(c,data) {
   }).join('') + '</svg>' + legend();
 }
 
-function drawStrip(hrs) {
- const hours=hrs.slice(0,12),max=Math.max(150,...hours.filter(x=>S.band(x.aqi)).map(x=>x.aqi));
- $('strip').innerHTML=hours.map(x=>{const b=S.band(x.aqi);return `<div class="hr" aria-label="${esc(x.time.slice(11,16))}, US AQI ${b?Math.round(x.aqi):'unavailable'}"><span>${esc(x.time.slice(11,16))}</span><b>${b?Math.round(x.aqi):'—'}</b><div class="hourtrack" aria-hidden="true"><i style="height:${b?Math.max(3,x.aqi/max*100):0}%;background:${b?b.color:'#9ca3af'}"></i></div></div>`;}).join('')||'<p class="muted">No hourly data.</p>';
+function renderScale(b,fresh){
+ $('scalecurrent').textContent=b?(fresh?b.label:'Reference only · '+b.label):'Waiting for a reading';
+ for(const cell of $('scalebands').children){const selected=!!b&&fresh&&cell.dataset.band===b.key;cell.classList.toggle('scaleactive',selected);if(selected)cell.setAttribute('aria-current','true');else cell.removeAttribute('aria-current');}
 }
+function drawStrip(hrs,win){
+ const hours=hrs.slice(0,12),max=Math.max(150,...hours.filter(x=>S.band(x.aqi)).map(x=>x.aqi)),fresh=!st.demo&&!st.stale;
+ $('strip').innerHTML=hours.map((x,i)=>{const b=S.band(x.aqi),chosen=fresh&&win&&i>=win.index&&i<win.index+2;return `<div class="hr ${chosen?'hourchosen':''}" aria-label="${esc(x.time.slice(11,16))}, US AQI ${b?Math.round(x.aqi):'unavailable'}${chosen?', recommended lower-pollution window':''}"><span>${esc(x.time.slice(11,16))}</span><b>${b?Math.round(x.aqi):'—'}</b><div class="hourtrack" aria-hidden="true"><i style="height:${b?Math.max(3,x.aqi/max*100):0}%;background:${b?b.color:'#9ca3af'}"></i></div></div>`;}).join('')||'<p class="muted">No hourly data.</p>';
+ $('stripnote').textContent=!fresh?'Reference only · fresh forecast required':win&&win.index<12?'Outlined hours mark the lower-pollution window.':win?'Best window appears later in the 24-hour forecast.':'No complete two-hour window available.';
+}
+$('openforecast').onclick=()=>show('hourly');
 function drawDisp() {
   const d = S.dispersion(st.wx, st.ctx.aqi);
   $('disp').innerHTML = d ? `<p class="lead" style="margin:0">${esc(d.text)}</p><div class="drv"><div><small>Dispersion</small><b>${esc(d.level)}</b></div><div><small>Wind</small><b>${st.wx.w} km/h</b></div><div><small>Humidity</small><b>${st.wx.h}%</b></div><div><small>Temperature</small><b>${st.wx.t}°C</b></div></div>` : '<p class="muted">Weather data is unavailable right now.</p>';
@@ -795,7 +801,7 @@ function show(v) {
 /* ---------- wiring ---------- */
 $('nav').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
 $('profile').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('');
-$('profile').onchange = e => { st.profile = e.target.value; if (st.data) render(); };
+$('profile').onchange = e => { st.profile = e.target.value; if(st.place)store.set('svasa_last',{p:st.place,profile:st.profile});if (st.data) render(); };
 $('q').addEventListener('input', e => { $('sugg').hidden = true; clearTimeout(suggTimer); suggTimer = setTimeout(() => suggest(e.target.value), 250); });
 $('q').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { const b = $('sugg').querySelector('button'); if (b) { e.preventDefault(); b.focus(); } } if (e.key === 'Escape') $('sugg').hidden = true; });
 $('sugg').addEventListener('keydown', e => { const b = e.target.closest('button'); if (!b) return; if (e.key === 'ArrowDown' && b.nextElementSibling) { e.preventDefault(); b.nextElementSibling.focus(); } if (e.key === 'ArrowUp') { e.preventDefault(); (b.previousElementSibling || $('q')).focus(); } if (e.key === 'Escape') { $('sugg').hidden = true; $('q').focus(); } });
@@ -861,9 +867,11 @@ function renderActivityTimes(){
     const choices=hrs.map((t,j)=>'<option value="'+j+'"'+(j===x.preferred?' selected':'')+'>'+esc(t.time.replace('T',' '))+'</option>').join('');
     return '<div class="activityrow"><label>Activity<select data-field="name" data-i="'+i+'">'+['Commute','Walk','Workout','School','Shopping','Other'].map(n=>'<option'+(x.name===n?' selected':'')+'>'+n+'</option>').join('')+'</select></label><label>Preferred start<select data-field="preferred" data-i="'+i+'"'+(!hrs.length?' disabled':'')+'>'+(choices||'<option>Forecast unavailable</option>')+'</select></label><label>Hours<select data-field="duration" data-i="'+i+'">'+[1,2,3,4].map(n=>'<option'+(x.duration===n?' selected':'')+'>'+n+'</option>').join('')+'</select></label><label>Flexibility<select data-field="flex" data-i="'+i+'">'+[0,1,2,4,6].map(n=>'<option value="'+n+'"'+(x.flex===n?' selected':'')+'>'+ (n?'±'+n+'h':'Fixed')+'</option>').join('')+'</select></label><button type="button" class="btn ghost sm" data-remove="'+i+'" aria-label="Remove activity '+(i+1)+'">Remove</button></div>';
   }).join('');
+  const best=S.bestWindow(hrs,2);$('planwindowhint').hidden=!best;$('planwindowtext').textContent=best?best.start.replace('T',' ')+' – '+best.end.replace('T',' ')+' · mean US AQI '+best.avg+'. Forecast, not a guarantee of safety.':'';
   $('addactivity').disabled=activities.length>=4;
   $('optimizeday').disabled=!hrs.length||!activities.length;
 }
+$('applywindow').onclick=()=>{const best=S.bestWindow(forecast(),2);if(!best)return;if(!activities.length)activities.push({name:'Walk',duration:2,preferred:best.index,flex:0});else Object.assign(activities[0],{duration:2,preferred:best.index,flex:0});renderActivityTimes();$('dayresult').textContent='Suggested window applied to first activity. Optimize to check the complete schedule.';};
 $('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);invalidatePlan();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)return;activities.splice(Number(b.dataset.remove),1);renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('addactivity').onclick=()=>{if(activities.length>=4)return;activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
