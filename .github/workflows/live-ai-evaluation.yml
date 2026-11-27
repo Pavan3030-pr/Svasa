@@ -3,13 +3,16 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['backend/lib/gemini.js', 'frontend/js/intelligence.js', 'tests/ai-contract.test.js', '.github/workflows/live-ai-evaluation.yml']
+    paths: ['backend/lib/gemini.js', 'frontend/js/intelligence.js', 'tests/ai-contract.test.js', 'tests/production-smoke.js', 'tests/live-ai-pacing.js', '.github/workflows/live-ai-evaluation.yml']
 permissions:
   contents: read
+concurrency:
+  group: svasa-strict-live-ai
+  cancel-in-progress: false
 jobs:
   live-evaluation:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

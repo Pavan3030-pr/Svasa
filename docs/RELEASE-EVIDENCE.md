@@ -7,3 +7,7 @@ The seeded optimizer benchmark evaluated 500 policy/scenario combinations, 488 f
 The strict five-language live AI workflow runs when assistant verification changes; provider fallback is explicitly not a strict pass. Test results and artifacts are tied to the commit under test. Live provider availability and native-language semantic quality are separate from schema validation.
 
 Genuine usability validation remains external: invite consenting participants to plan two activities, explain the comparison, save/reopen, and report completion; record only voluntary anonymous feedback using the app's existing local export. No fabricated participant evidence.
+
+## Live evaluation cooldown remediation
+
+Run 46016230173 on e774ed8 returned HTTP 200 and valid evidence for all five languages, but four responses used provider_rate_limit fallback. Only Bengali returned live Gemini; the strict run correctly failed. Strict requests now wait 70 seconds before each language and retry only explicit provider-rate-limit fallback after 75 and 130 seconds, at most three attempts per language. Regular smoke checks retain their original pace. Strict runs remain failing if any language lacks live output; external provider quotas are not bypassed. The pacing behavior is covered by deterministic tests.
