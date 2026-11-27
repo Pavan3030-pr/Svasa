@@ -18,6 +18,8 @@ jobs:
         run: npm ci --omit=dev --ignore-scripts --no-fund
       - name: Runtime dependency security audit
         run: npm audit --omit=dev --audit-level=high
+      - name: Scan tracked text for accidental secrets
+        run: npm run security:secrets
       - name: JavaScript syntax
         run: find frontend backend api tests -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Unit and mocked integration tests

@@ -1,5 +1,5 @@
 'use strict';
-const S=require('../../frontend/js/core.js'),{createHash}=require('node:crypto');
+const S=require('../../frontend/js/core.js'),{createHash}=require('node:crypto'),guard=require('./guard');
 const memo=new Map(),pending=new Map();let blockedUntil=0,blockedReason='provider_rate_limit';
 // Only generic, first-turn questions are memoized; no raw prompt or history is retained.
 const publicQuestions=new Set(['can i run outside?','do i need a mask?','best time to go out?','should i open windows?','is it safe for my child?','what is polluting the air?','what precautions should i consider for outdoor activity?','what precautions should i take outside?','can i walk?']);
@@ -39,8 +39,10 @@ async function generateLive(q,ctx){
   const input={question:q,verifiedAir:{aqi:ctx.aqi,pm25:ctx.pm25,dominant:ctx.dominant,trend:ctx.trend,window:ctx.window,observedAt:ctx.observedAt,timezone:'UTC',profile:ctx.profile,source:ctx.source},guidance:S.advice(ctx.aqi,ctx.profile),history:ctx.hist};
   const deadline=Date.now()+12000;
   for(let attempt=0;attempt<2;attempt++){
+  if(deadline-Date.now()<3500)break;
+  let allowed;try{allowed=await guard.reserveModelAttempt();}catch(_){return unavailable('provider_budget_unavailable');}if(!allowed)return unavailable('provider_budget_exhausted');
   const remaining=deadline-Date.now();if(remaining<1500)break;
-  const res=await fetch(base+'/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({systemInstruction:{parts:[{text:system+(attempt?' Correct any formatting or language error: use the exact JSON schema and requested native script in all three fields.':'')}]},contents:[{role:'user',parts:[{text:JSON.stringify(input)}]}],generationConfig}),signal:AbortSignal.timeout(Math.min(8000,remaining))});
+  const res=await fetch(base+'/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({systemInstruction:{parts:[{text:system+(attempt?' Correct any formatting or language error: use the exact JSON schema and requested native script in all three fields.':'')}]},contents:[{role:'user',parts:[{text:JSON.stringify(input)}]}],generationConfig}),redirect:'error',signal:AbortSignal.timeout(Math.min(8000,remaining))});
   if(res.status===429)return unavailable('provider_rate_limit');
   if(!res.ok)return unavailable(res.status>=500?'provider_unavailable':'provider_rejected');
   let value=null;try{value=validateResponse(S.parseGemini(await res.json()),ctx);}catch(_){}

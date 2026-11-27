@@ -27,7 +27,7 @@ async function check(name,fn){try{out.checks[name]=await fn();}catch(e){out.chec
     const fields=['recommendation','reason','limitation'].map(k=>({field:k,script:typeof r.data.sections?.[k]==='string'&&script.test(r.data.sections[k])}));
     const evidence=Number.isFinite(r.data.evidence?.aqi)&&Number.isFinite(Date.parse(r.data.evidence?.observedAt))&&r.data.evidence?.source==='Open-Meteo / CAMS model';
     const live=r.status===200&&r.data.source==='gemini'&&fields.every(x=>x.script)&&evidence;
-    const fallback=r.status===200&&r.data.source==='rules'&&['provider_rate_limit','provider_network','provider_unavailable','provider_rejected','provider_unconfigured','invalid_model_response'].includes(r.data.reason)&&fields.every(x=>x.script)&&evidence;
+    const fallback=r.status===200&&r.data.source==='rules'&&['provider_rate_limit','provider_network','provider_unavailable','provider_rejected','provider_unconfigured','invalid_model_response','provider_budget_unavailable','provider_budget_exhausted'].includes(r.data.reason)&&fields.every(x=>x.script)&&evidence;
     results.push({lang,status:r.status,source:r.data.source||null,reason:r.data.reason||null,fields,evidence,result:live?'live Gemini':fallback?'verified provider fallback':'fail'});
    }catch(_){results.push({lang,result:'fail',reason:'Network or response parse failure'});}
   }
