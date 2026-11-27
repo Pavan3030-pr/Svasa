@@ -9,19 +9,20 @@ const HEAD = { 'Content-Security-Policy': CSP, 'X-Content-Type-Options': 'nosnif
 const staticCache=new Map();
 function staticAsset(file){const stat=fs.statSync(file),old=staticCache.get(file);if(old&&old.mtime===stat.mtimeMs)return old;const raw=fs.readFileSync(file),type=MIME[path.extname(file)],compressible=/^(text\/|application\/json|image\/svg\+xml)/.test(type),gz=compressible&&raw.length>=1024?zlib.gzipSync(raw):null;const v={mtime:stat.mtimeMs,raw,gz,type};staticCache.set(file,v);return v;}
 function send(res, code, body, type, extra) {
-  res.writeHead(code, Object.assign({ 'Content-Type': type || 'application/json' }, HEAD, extra || {}));
+  res.writeHead(code, Object.assign({ 'Content-Type': type || 'application/json' }, HEAD, res.getHeader('Cache-Control')?{'Cache-Control':res.getHeader('Cache-Control')}:{}, extra || {}));
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 function readBody(req) {
   return new Promise((ok, no) => {
-    let b = '', n = 0, over = false;
-    req.on('data', d => { if (over) return; n += d.length; if (n > 4096) { over = true; no(Object.assign(new Error('big'), { code: 413 })); return; } b += d; });
-    req.on('end', () => { if (!over) ok(b); }); req.on('error', no);
+    const chunks=[]; let n=0,over=false;
+    req.on('data', d => { if (over) return; n += d.length; if (n > 4096) { over = true; chunks.length=0; no(Object.assign(new Error('big'), { code: 413 })); return; } chunks.push(d); });
+    req.on('end', () => { if (!over) {try{ok(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks,n)));}catch(e){no(e);}} }); req.on('error', no);
   });
 }
 const server = http.createServer(async (req, res) => {
   try {
     const url = req.url.split('?')[0];
+    if(url.startsWith('/api/'))res.setHeader('Cache-Control','no-store');
     res.on('finish', () => { if (res.statusCode >= 400) console.log(JSON.stringify({ t: new Date().toISOString(), m: req.method, u: url, s: res.statusCode })); });
     if (url === '/api/health' && req.method === 'GET') { const r = health(); return send(res, r.status, r.body); }
     if (url === '/api/stations') {

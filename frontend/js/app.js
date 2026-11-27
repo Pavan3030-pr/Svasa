@@ -367,7 +367,7 @@ $('nav').addEventListener('click', e => { const b = e.target.closest('button[dat
 $('profile').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('');
 $('refreshair').onclick=()=>{if(st.place&&!$('refreshair').disabled)load(st.place);};
 const savedThreshold=store.get('svasa_alert_threshold',2);$('thr').value=[1,2,3].includes(savedThreshold)?String(savedThreshold):'2';$('thr').onchange=()=>store.set('svasa_alert_threshold',Number($('thr').value));
-function changeProfile(profile){if(!Object.hasOwn(S.PROFILES,profile)||profile===st.profile)return;st.profile=profile;st.hist=[];$('profile').value=profile;if(st.place)store.set('svasa_last',{p:st.place,profile});if(st.data)render();}
+function changeProfile(profile){if(!Object.hasOwn(S.PROFILES,profile)||profile===st.profile)return;invalidatePlan();clearReview();st.profile=profile;st.hist=[];$('profile').value=profile;if(st.place)store.set('svasa_last',{p:st.place,profile});reviewSnapshot=I.restore(store.get(reviewKey,null),S,cityKey(),profile);if(st.data)render();$('dayresult').textContent='Profile changed. Optimize again for this profile.';}
 $('profile').onchange = e => changeProfile(e.target.value);
 $('q').addEventListener('input', e => { $('sugg').hidden = true; clearTimeout(suggTimer); suggTimer = setTimeout(() => suggest(e.target.value), 250); });
 $('q').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { const b = $('sugg').querySelector('button'); if (b) { e.preventDefault(); b.focus(); } } if (e.key === 'Escape') $('sugg').hidden = true; });
@@ -426,7 +426,7 @@ const I=window.SvasaIntelligence;
 let reviewSnapshot=null,latestStation=null,draftTimes=null;
 const reviewKey='svasa_adaptive_plan_v1';
 function persistReview(){if(reviewSnapshot&&!store.set(reviewKey,{...reviewSnapshot,version:1,savedAt:Date.now()}))banner('Schedule saved, but adaptive review could not be stored.');}
-function forgetReview(){if(!store.set(reviewKey,null)){banner('Could not remove the saved adaptive plan.');return;}clearReview();$('forgetadaptive').hidden=true;$('dayresult').textContent='Saved adaptive plan removed from this browser.';}
+function forgetReview(){if(!store.set(reviewKey,null)){banner('Could not remove the saved adaptive plan.');return false;}clearReview();invalidatePlan();$('forgetadaptive').hidden=true;$('dayresult').textContent='Saved adaptive plan removed from this browser.';return true;}
 const cityKey=()=>st.place?st.place.lat+','+st.place.lon:'';
 const metric=v=>Number.isFinite(v)?v.toFixed(1)+' µg·h/m³':'Unavailable';
 const fmtTime=t=>t?t.replace('T',' '):'Unavailable';
@@ -515,7 +515,7 @@ $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderF
 
 inbox=window.SvasaInbox.init({$,store,show});
 alertsOn=!!store.get('svasa_device_alerts',false)&&'Notification'in window&&Notification.permission==='granted';if(alertsOn)$('notif').textContent='Disable device alerts while open';
-window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,onSaved:()=>{persistReview();renderReview();},show,banner,notify:(...args)=>inbox.emit(...args)});
+window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,onSaved:()=>{persistReview();renderReview();},onClear:forgetReview,show,banner,notify:(...args)=>inbox.emit(...args)});
 window.SvasaPushUI.init({$,store,st});
 
 /* ---------- boot ---------- */

@@ -10,6 +10,7 @@ const assert=require('node:assert/strict'),S=require('../frontend/js/core'),air=
   assert.equal(air.coordinates({lat:91,lon:0}),null);assert.equal(air.coordinates({lat:'17',lon:78}),null);
   global.fetch=async()=>({ok:true,json:async()=>({current:{time:'2000-01-01T00:00',us_aqi:10}})});
   await assert.rejects(()=>air.verifiedContext({lat:1,lon:2},'general','en',[]),/Fresh air data/);
+  global.fetch=async()=>({ok:true,json:async()=>({current:{time:date.replace('T',' '),us_aqi:10}})});await assert.rejects(()=>air.verifiedContext({lat:2,lon:2},'general','en',[]),/Fresh air data/);
   const now=Date.parse('2026-11-27T05:30Z');
   assert.equal(S.readingAge({current:{time:'2026-11-27T11:00'},utc_offset_seconds:19800},now),0);
   assert.equal(S.readingAge({current:{time:'2026-11-27T11:00'}},now),null);
