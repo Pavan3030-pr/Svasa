@@ -5,6 +5,8 @@ const assert=require('node:assert/strict'),S=require('../frontend/js/core'),air=
   const ctx=await air.verifiedContext({lat:17.4,lon:78.5},'__proto__','constructor',[]);
   assert.equal(ctx.aqi,170);assert.equal(ctx.profile,'general');assert.equal(ctx.lang,'en');assert.equal(ctx.source,'Open-Meteo / CAMS model');
   await air.verifiedContext({lat:17.4,lon:78.5},'general','en',[]);assert.equal(calls,1);
+  let concurrent=0;global.fetch=async()=>{concurrent++;await new Promise(r=>setTimeout(r,15));return {ok:true,json:async()=>({current:{time:date,us_aqi:100,pm2_5:20},hourly:{time:[],us_aqi:[]}})};};
+  const batch=await Promise.all(Array.from({length:50},()=>air.verifiedContext({lat:18,lon:79},'general','en',[])));assert.equal(concurrent,1);assert.ok(batch.every(x=>x.aqi===100));
   assert.equal(air.coordinates({lat:91,lon:0}),null);assert.equal(air.coordinates({lat:'17',lon:78}),null);
   global.fetch=async()=>({ok:true,json:async()=>({current:{time:'2000-01-01T00:00',us_aqi:10}})});
   await assert.rejects(()=>air.verifiedContext({lat:1,lon:2},'general','en',[]),/Fresh air data/);

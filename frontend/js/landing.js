@@ -10,7 +10,8 @@ async function get(u) { const c = new AbortController(), t = setTimeout(() => c.
 
 function paintHero(aqi, win) {
   const b = S.band(aqi); if (!b) return;
-  document.documentElement.style.setProperty('--c', b.ink); document.documentElement.style.setProperty('--t', b.bg);
+  // Scope dynamic color changes to the reading, not the whole page.
+  $('hAqi').style.color=b.ink;
   $('hAqi').textContent = Math.round(aqi); $('hLabel').textContent = b.label; $('hVerdict').textContent = S.verdict(aqi, 'asthma');
   if (win) $('hWin').textContent = win.start.slice(11, 16) + '–' + win.end.slice(11, 16);
 }
@@ -21,11 +22,13 @@ const heroReading=cityReading(CITIES[0],0);
 let started=false;
 async function run(){
   if(started)return;started=true;
-  const out=await Promise.all([heroReading,...CITIES.slice(1).map((c,i)=>cityReading(c,i+1))]);
+  const out=[await heroReading];
+  // Limit concurrent provider requests to two and update the ticker once.
+  for(let i=1;i<CITIES.length;i+=2)out.push(...await Promise.all(CITIES.slice(i,i+2).map((c,j)=>cityReading(c,i+j))));
   const ok=out.filter(x=>x&&S.band(x.aqi));
   $('ticker').innerHTML=CITIES.map((city,i)=>{const x=out[i],b=x&&S.band(x.aqi);return b?`<div class="tk" style="--c:${b.color}"><small>${esc(x.name)}</small><b style="color:${b.ink}">${Math.round(x.aqi)}</b><span>${esc(b.label)}</span></div>`:`<div class="tk"><small>${esc(city[0])}</small><b>—</b><span>Unavailable</span></div>`;}).join('');
   $('tickNote').textContent=ok.length?'Modelled estimates from Open-Meteo / CAMS, refreshed when you open the page. Not a street monitor.':'Live readings are unavailable right now. Open the app to try again.';
 }
-if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)){observer.disconnect();run();}},{rootMargin:'240px'});observer.observe($('ticker'));}else run();
+if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)){observer.disconnect();run();}},{rootMargin:'80px'});observer.observe($('ticker'));}else run();
 
 })();

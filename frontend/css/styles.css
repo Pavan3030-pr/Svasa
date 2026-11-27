@@ -144,3 +144,6 @@ a.logo{text-decoration:none}
 
 /* Skip offscreen dashboard painting while preserving layout and semantic content. */
 @media(max-width:620px){#v-today>.card:not(.hero){content-visibility:auto;contain-intrinsic-size:auto 260px}.hero .ring{background:conic-gradient(from 0deg,var(--c) calc(var(--p,0)*1%),#d8e5dc 0)}.hero .ring>div{box-shadow:none}}
+
+/* Mobile dashboard: avoid broad paint invalidation and costly shadows on scroll. */
+@media(max-width:620px){.card{box-shadow:none}.hero{background:linear-gradient(135deg,var(--t),var(--surface))}.nav,.top{backdrop-filter:none}.grid2>.card{content-visibility:auto;contain-intrinsic-size:auto 300px}}

@@ -57,3 +57,6 @@ main{overflow-x:clip}
 
 /* Avoid rendering offscreen editorial sections until they approach the viewport. */
 @media(max-width:900px){.lp-scene{contain:layout paint}.lp-hero{gap:24px}.lp-copy h1{margin:12px 0}.lp-ticker{contain:layout paint}}
+
+/* Keep the visual identity, avoid expensive scrolling blur and offscreen artwork paint. */
+.lp-nav{backdrop-filter:none;background:#edf2ed}.lp-orb .core,.lp-float{transition:none}.lp-orb .core{box-shadow:0 0 0 12px #ffffff99,0 12px 24px #175b4b18}.lp-float{box-shadow:0 5px 15px #163a2912}@media(max-width:900px){body{background:#edf2ed}.lp-sec,.lp-final{content-visibility:auto;contain-intrinsic-size:auto 540px}.lp-scene{isolation:isolate}.lp-card{box-shadow:0 2px 8px #163a2910}}

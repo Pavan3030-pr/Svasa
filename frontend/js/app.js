@@ -260,7 +260,7 @@ async function ask(q, en) {
   if (location.protocol.startsWith('http') && (await getCapabilities())?.ai!==false) { try { result = await viaServer(q); } catch (_) {} }
   if(requestSeq!==loadSequence||requestProfile!==st.profile||requestLang!==st.lang){t.textContent='Context changed. Please ask again.';t.classList.remove('typing');busy=false;return;}
   const a=result&&result.answer; const text=a||('Local rule-based fallback (English; model data): '+fb);
-  t.textContent=text; if(result&&result.sections&&result.evidence){t.textContent='';for(const [label,key] of [['Recommendation','recommendation'],['Why','reason'],['Limitations','limitation']]){const row=document.createElement('div'),heading=document.createElement('strong'),body=document.createElement('p');heading.textContent=label;body.textContent=result.sections[key];row.append(heading,body);t.append(row);}const evidence=document.createElement('small');evidence.textContent='Open-Meteo / CAMS · US AQI '+Math.round(result.evidence.aqi)+' · '+result.evidence.observedAt+' (UTC)';t.append(evidence);} t.classList.remove('typing'); t.dataset.source=result&&result.source||'local'; $('log').scrollTop = $('log').scrollHeight;
+  t.textContent=text; if(result&&result.sections&&result.evidence){t.textContent='';for(const [label,key] of [['Recommendation','recommendation'],['Why','reason'],['Limitations','limitation']]){const row=document.createElement('div'),heading=document.createElement('strong'),body=document.createElement('p');heading.textContent=label;body.textContent=result.sections[key];row.append(heading,body);t.append(row);}const evidence=document.createElement('small');evidence.textContent='Open-Meteo / CAMS · US AQI '+Math.round(result.evidence.aqi)+' · '+result.evidence.observedAt+' (UTC)';t.append(evidence);} t.classList.remove('typing'); t.dataset.source=result&&result.source||'local';if(result?.source==='rules')$('aimode').textContent='Rule-based · provider busy';else if(result?.source==='gemini')$('aimode').textContent='Gemini response'; $('log').scrollTop = $('log').scrollHeight;
   st.hist=st.hist.concat([{r:'u',t:q},{r:'a',t:text}]).slice(-8);busy=false;
 }
 
@@ -308,6 +308,7 @@ function show(v) {
   if(v==='hourly'&&st.data){drawChart(st.hrs||[],st.ctx?.window);loadHistory();}
   if(v==='cities')drawCities();
   if(v==='family')renderFamily();
+  if(v==='ask')refreshAIMode();
   if(v==='plan')renderActivityTimes();
   window.scrollTo(0, 0);
 }
@@ -354,7 +355,7 @@ $('qs').onclick = e => { const b = e.target.closest('button'); if (b) ask(b.text
 $('af').onsubmit = e => { e.preventDefault(); const v = $('aq').value; $('aq').value = ''; ask(v); };
 pushMsg('a', 'Hi, I am Svasa. Ask me about the air in your city, when to go out, or whether you need a mask.');
 function getCapabilities(){if(!capabilities)capabilities=fetch('/api/health',{signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)throw Error('Health unavailable');return r.json();}).catch(()=>{capabilities=null;return null;});return capabilities;}
-getCapabilities().then(j=>{st.serverAI=!!j?.ai;$('aimode').textContent=st.serverAI?'Gemini on':'Rule-based answers';});
+function refreshAIMode(){getCapabilities().then(j=>{st.serverAI=!!j?.ai;$('aimode').textContent=st.serverAI?'Gemini available · fallback supported':'Rule-based answers';});}
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 setInterval(() => { if (st.place && !document.hidden && !busy) load(st.place); }, 5 * 60 * 1000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {const register=()=>navigator.serviceWorker.register('sw.js').catch(()=>{});window.addEventListener('load',()=>{if('requestIdleCallback'in window)requestIdleCallback(register,{timeout:2500});else setTimeout(register,100);},{once:true});}
@@ -458,7 +459,8 @@ $('pushoff').onclick=async()=>{
  try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;$('pushtest').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
 };
 $('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});pushStatus('Test accepted by the push service. Check your device notifications to confirm delivery.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
-initPush();
+const alertsPanel=$('pushon').closest('.card');
+if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)){observer.disconnect();initPush();}},{rootMargin:'160px'});observer.observe(alertsPanel);}else initPush();
 
 /* ---------- boot ---------- */
 show(location.hash.slice(1));
