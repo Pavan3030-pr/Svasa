@@ -25,7 +25,8 @@
     carbon_monoxide: { name: 'CO', unit: 'µg/m³', who24: 4000, note: 'From incomplete combustion.' }
   };
   function band(aqi) {
-    const v = Number(aqi);
+    if (typeof aqi !== 'number') return null;
+    const v = aqi;
     if (!isFinite(v) || v < 0) return null;
     return BANDS.find(b => v <= b.max);
   }
@@ -47,6 +48,7 @@
   }
   function mask(aqi, profile) {
     const lvl = effectiveLevel(aqi, profile);
+    if (lvl < 0) return 'Air data unavailable; check a current reliable source.';
     if (lvl <= 1) return 'No mask needed.';
     if (lvl === 2) return 'Optional. A well-fitted N95 or FFP2 helps if you will be outside for long.';
     return 'Wear a well-fitted N95 or FFP2 outdoors. Cloth and surgical masks do not filter fine particles well.';
@@ -62,7 +64,8 @@
       { go: 'Stay indoors where possible.', exercise: 'Skip outdoor activity.', windows: 'Keep windows and doors closed.', purifier: 'Run a HEPA purifier on high.' },
       { go: 'Stay indoors. Avoid all outdoor activity.', exercise: 'No exercise outdoors.', windows: 'Seal gaps and keep everything closed.', purifier: 'Run a HEPA purifier on high.' }
     ];
-    const s = Object.assign({}, sets[Math.max(0, lvl)]);
+    if (lvl < 0) return {go:'Air quality unavailable.',exercise:'No current recommendation.',windows:'No current recommendation.',purifier:'No current recommendation.',mask:mask(aqi,profile),urgent:false,symptoms:''};
+    const s = Object.assign({}, sets[lvl]);
     s.mask = mask(aqi, profile);
     s.urgent = lvl >= 3;
     s.symptoms = sens && lvl >= 2 ? 'If you get wheezing, chest tightness or unusual breathlessness, rest indoors and contact your doctor. Seek emergency care if severe.' : '';
@@ -70,14 +73,14 @@
   }
   function bestWindow(hours, len) {
     len = len || 2;
-    if (!Array.isArray(hours) || hours.length < len) return null;
+    if (!Array.isArray(hours) || !Number.isInteger(len) || len < 1 || hours.length < len) return null;
     let best = null;
     for (let i = 0; i + len <= hours.length; i++) {
       let sum = 0, ok = true;
-      for (let j = 0; j < len; j++) { const v = hours[i + j].aqi; if (typeof v !== 'number') { ok = false; break; } sum += v; }
+      for (let j = 0; j < len; j++) { const v = hours[i + j].aqi; if (!band(v) || (j && plusHour(hours[i+j-1].time) !== hours[i+j].time)) { ok = false; break; } sum += v; }
       if (!ok) continue;
       const avg = sum / len;
-      if (!best || avg < best.avg) best = { start: hours[i].time, end: plusHour(hours[i + len - 1].time), avg: Math.round(avg), index: i };
+      if (!best || avg < best.rawAvg) best = { start: hours[i].time, end: plusHour(hours[i + len - 1].time), avg: Math.round(avg), rawAvg: avg, peak: Math.max(...hours.slice(i,i+len).map(x=>x.aqi)), index: i };
     }
     return best;
   }
@@ -177,15 +180,15 @@
   }
   function planTrip(hrs,len,from,to){
     from=Number.isInteger(from)?from:0;to=Number.isInteger(to)?to:24;
-    if(!Array.isArray(hrs)||!hrs.length||typeof hrs[0].aqi!=='number')return null;
+    if(!Array.isArray(hrs)||!hrs.length||!band(hrs[0].aqi)||!Number.isInteger(len)||len<1||len>24||from<0||to>24||from>=to)return null;
     let best=null;
     for(let i=0;i+len<=hrs.length;i++){let s=0,ok=true;
-      for(let j=0;j<len;j++){const x=hrs[i+j],h=+x.time.slice(11,13);if(typeof x.aqi!=='number'||h<from||h>=to){ok=false;break}s+=x.aqi}
-      if(ok){const avg=s/len;if(!best||avg<best.avg)best={start:hrs[i].time,end:plusHour(hrs[i+len-1].time),avg:Math.round(avg),index:i}}}
+      for(let j=0;j<len;j++){const x=hrs[i+j],h=+x.time.slice(11,13);if(!band(x.aqi)||h<from||h>=to||(j&&plusHour(hrs[i+j-1].time)!==x.time)){ok=false;break}s+=x.aqi}
+      if(ok){const avg=s/len;if(!best||avg<best.rawAvg)best={start:hrs[i].time,end:plusHour(hrs[i+len-1].time),avg:Math.round(avg),rawAvg:avg,peak:Math.max(...hrs.slice(i,i+len).map(x=>x.aqi)),index:i}}}
     if(!best)return null;
-    let now=0,k=0;for(let i=0;i<len&&i<hrs.length;i++){if(typeof hrs[i].aqi==='number'){now+=hrs[i].aqi;k++}}
-    now=k?Math.round(now/k):hrs[0].aqi;
-    return {win:best,now,savedPct:now>0?Math.max(0,Math.round((now-best.avg)/now*100)):0};
+    let now=0,k=0;for(let i=0;i<len&&i<hrs.length;i++){if(band(hrs[i].aqi)){now+=hrs[i].aqi;k++}}
+    now=k===len?Math.round(now/k):null;
+    return {win:best,now,savedPct:now>0?Math.max(0,Math.round((now-best.avg)/now*100)):null};
   }
 
   const IN={pm2_5:[[0,30,0,50],[30,60,50,100],[60,90,100,200],[90,120,200,300],[120,250,300,400],[250,500,400,500]],

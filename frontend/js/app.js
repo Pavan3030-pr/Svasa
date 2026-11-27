@@ -27,22 +27,31 @@ function demo() {
   for (let i = 0; i < 48; i++) { const h = i % 24, w = Math.sin((h - 4) / 24 * 6.28); time.push(day + 'T' + String(h).padStart(2, '0') + ':00'); us.push(Math.round(95 + 55 * w)); pm.push(40 + 25 * w); }
   return { current: { time: day + 'T12:00', us_aqi: 132, pm2_5: 48.2, pm10: 90, nitrogen_dioxide: 38, ozone: 72, sulphur_dioxide: 12, carbon_monoxide: 610, us_aqi_pm2_5: 132, us_aqi_pm10: 70, us_aqi_nitrogen_dioxide: 30, us_aqi_ozone: 55, us_aqi_sulphur_dioxide: 8, us_aqi_carbon_monoxide: 7 }, hourly: { time, us_aqi: us, pm2_5: pm } };
 }
+let loadSequence = 0;
 async function load(p) {
+  const seq = ++loadSequence;
+  st.ctx = null; st.data = null; st.hist = []; lastLvl = null;
+  $('gcard').hidden = true;
+  $('hero').textContent = 'Loading current air data…';
   st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
   try {
     const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5&forecast_days=2&past_days=7&timezone=auto`);
-    if (!d.current || d.current.us_aqi == null) throw new Error('No data for this location yet');
+    if (seq !== loadSequence) return;
+    if (!d.current || !S.band(d.current.us_aqi)) throw new Error('No data for this location yet');
     st.data = d; st.demo = false; st.stale = null; store.set('svasa_snap_' + p.name, { at: Date.now(), data: d });
   } catch (e) {
+    if (seq !== loadSequence) return;
     const snap = store.get('svasa_snap_' + p.name, null);
     if (snap && snap.data) { st.data = snap.data; st.demo = false; st.stale = snap.at; banner('Offline. Showing the last saved reading from ' + new Date(snap.at).toLocaleString() + '.'); }
     else { st.data = demo(); st.demo = true; st.stale = null; banner('Live data is unavailable (' + e.message + '). Showing sample data.'); }
   }
   try {
     const w = (await jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`)).current;
+    if (seq !== loadSequence) return;
     st.wx = { t: Math.round(w.temperature_2m), h: Math.round(w.relative_humidity_2m), w: Math.round(w.wind_speed_10m) };
-  } catch (_) { st.wx = null; }
+  } catch (_) { if (seq !== loadSequence) return; st.wx = null; }
+  if (seq !== loadSequence) return;
   store.set('svasa_last', { p, profile: st.profile });
   $('v-today').classList.remove('loading');
   render(); drawCities(); loadStation();
@@ -55,15 +64,15 @@ function render() {
   const root = document.documentElement.style; root.setProperty('--c', b.color); root.setProperty('--t', b.bg); root.setProperty('--ci', b.ink);
   st.ctx = { aqi, profile: st.profile, dominant: dom, window: win, trend: tr, city: st.place.name, wx: st.wx };
 
-  const avgPm = S.trailingAvg(st.data, 'pm2_5', c.time, 24), ind = S.indiaAqi(avgPm == null ? c : Object.assign({}, c, { pm2_5: avgPm })), wn = S.windNote(st.wx && st.wx.w, aqi);
+  const ind = null, wn = S.windNote(st.wx && st.wx.w, aqi);
   const status = st.demo ? 'Sample data' : st.stale ? 'Offline snapshot' : 'Live';
   const trendLabel = { rising: '↗ Worsening', falling: '↘ Improving', steady: '→ Steady' }[tr];
   $('hero').innerHTML =
     `<div class="ring" style="--p:0" role="img" aria-label="US AQI ${Math.round(aqi)}"><div><b>${Math.round(aqi)}</b><span>US AQI</span></div></div>
      <div><p class="eyebrow">${esc(st.place.name)} · ${status} · ${esc(c.time.slice(11, 16))}</p>
      <h1>${esc(b.label)}</h1>
-     <p class="verdict">${esc(S.verdict(aqi, st.profile))}</p>
-     <p class="lead">${esc(a.go)}${dom ? ' Main driver: ' + S.POLLUTANTS[dom].name + '.' : ''}${wn ? ' ' + esc(wn) : ''}</p>
+     <p class="verdict">${esc(st.demo || st.stale ? 'Reference only · not current' : S.verdict(aqi, st.profile))}</p>
+     <p class="lead">${esc(st.demo || st.stale ? 'Current guidance is unavailable.' : a.go)}${dom ? ' Main driver: ' + S.POLLUTANTS[dom].name + '.' : ''}${wn ? ' ' + esc(wn) : ''}</p>
      <div class="chips-row">
        <span class="chip2">${trendLabel}</span>
        <span class="chip2" title="Modelled estimate from Open-Meteo / CAMS, not a street monitor">Modelled data · Open-Meteo</span>
@@ -76,24 +85,24 @@ function render() {
   const ring = $('hero').querySelector('.ring'); requestAnimationFrame(() => requestAnimationFrame(() => ring && ring.style.setProperty('--p', Math.min(100, aqi / 3))));
   $('goplan').onclick = () => show('plan');
   $('share').onclick = async () => {
-    const t = `${st.place.name}: AQI ${Math.round(aqi)} (${b.label}). ${a.go} via Svasa`;
+    const t = `${st.place.name} (${status}): AQI ${Math.round(aqi)} (${b.label}). ${st.demo || st.stale ? 'Reference only.' : a.go} via Svasa`;
     try { if (navigator.share) await navigator.share({ text: t }); else { await navigator.clipboard.writeText(t); $('share').textContent = 'Copied'; setTimeout(() => { const s = $('share'); if (s) s.textContent = 'Share'; }, 1500); } } catch (_) {}
   };
 
-  const rows = [['Going out', a.go], ['Exercise', a.exercise], ['Mask', a.mask], ['Windows', a.windows], ['Air purifier', a.purifier], ...S.tips(st.profile, aqi).map(x => ['For you', x])];
+  const rows = st.demo || st.stale ? [['Data unavailable', 'Current recommendations require fresh live data. Values above are for reference only.']] : [['Going out', a.go], ['Exercise', a.exercise], ['Mask', a.mask], ['Windows', a.windows], ['Air purifier', a.purifier], ...S.tips(st.profile, aqi).map(x => ['For you', x])];
   $('adv').innerHTML = rows.map(r => `<div class="tile"><h3>${esc(r[0])}</h3><p>${esc(r[1])}</p></div>`).join('');
-  $('alert').innerHTML = a.symptoms ? `<div class="alert" role="alert">${esc(a.symptoms)}</div>` : '';
+  $('alert').innerHTML = !st.demo && !st.stale && a.symptoms ? `<div class="alert" role="alert">${esc(a.symptoms)}</div>` : '';
 
   const keys = ['pm2_5', 'pm10', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 'carbon_monoxide'];
   $('pol').innerHTML = keys.filter(k => typeof c[k] === 'number').map(k => {
-    const P = S.POLLUTANTS[k], r = S.whoRatio(k, c[k]);
-    return `<div class="pol ${k === dom ? 'dom' : ''}"><b>${P.name}</b><div class="bar" role="img" aria-label="${r} times WHO guideline"><i style="width:${Math.min(100, r / 4 * 100)}%"></i></div><small>${c[k].toFixed(1)} ${P.unit} · ${r}× WHO</small><span class="note">${esc(P.note)}</span></div>`;
+    const P = S.POLLUTANTS[k];
+    return `<div class="pol ${k === dom ? 'dom' : ''}"><b>${P.name}</b><small>${c[k].toFixed(1)} ${P.unit} · model estimate</small><span class="note">${esc(P.note)}</span></div>`;
   }).join('');
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
   st.hrs = hrs; drawStrip(hrs); drawDisp(); drawChart(hrs, win); drawHistory(c);
-  $('btip').textContent = S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
-  notifyCheck(aqi);
+  $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
+  if (!st.demo && !st.stale) notifyCheck(aqi);
 }
 function drawChart(h, win) {
   if (!h.length) { $('chart').innerHTML = '<p class="muted">No hourly forecast available.</p>'; return; }
@@ -117,7 +126,7 @@ function drawHistory(c) {
 }
 
 function drawStrip(hrs) {
-  $('strip').innerHTML = hrs.slice(0, 12).map(x => `<div class="hr"><span>${esc(x.time.slice(11, 13))}h</span><i style="background:${S.band(x.aqi || 0).color}"></i><b>${Math.round(x.aqi || 0)}</b></div>`).join('') || '<p class="muted">No hourly data.</p>';
+  $('strip').innerHTML = hrs.slice(0, 12).map(x => `<div class="hr"><span>${esc(x.time.slice(11, 13))}h</span><i style="background:${(S.band(x.aqi)?.color || '#9ca3af')}"></i><b>${S.band(x.aqi) ? Math.round(x.aqi) : '—'}</b></div>`).join('') || '<p class="muted">No hourly data.</p>';
 }
 function drawDisp() {
   const d = S.dispersion(st.wx, st.ctx.aqi);
@@ -194,11 +203,10 @@ window.addEventListener('unhandledrejection', () => banner('Something went wrong
 
 /* ---------- planner ---------- */
 function plan() {
-  if (!st.data) return;
+  if (!st.data || st.demo || st.stale) { $('planout').textContent = 'Fresh live forecast required for planning.'; return; }
   const hrs = S.hourlyFrom(st.data, st.data.current.time), len = +$('dur').value, p = S.planTrip(hrs, len, +$('from').value, +$('to').value);
   $('planout').textContent = !p ? 'No clean slot fits inside that time range. Try widening it.'
-    : p.win.index === 0 ? `Go now. The next ${len} hour(s) are already the cleanest (AQI about ${p.win.avg}).`
-    : `Start at ${p.win.start.slice(11, 16)} and finish by ${p.win.end.slice(11, 16)}. AQI about ${p.win.avg} instead of ${p.now} if you go now, ${p.savedPct}% lower.`;
+    : `Lowest forecast average: ${p.win.start.replace('T',' ')} to ${p.win.end.replace('T',' ')} (AQI ${p.win.avg}; peak ${p.win.peak}). ${p.savedPct == null ? '' : p.savedPct + '% lower mean AQI than starting now. '}${S.effectiveLevel(p.win.peak,st.profile)>=2?'Consider an indoor alternative; even this window may be unsuitable.':'Conditions may change; check again before leaving.'}`;
 }
 
 /* ---------- assistant ---------- */
@@ -228,7 +236,7 @@ async function ask(q, en) {
   q = S.cleanQuery(q); if (!q || busy) return;
   pushMsg('u', q);
   const sf = S.safety(q, st.lang); if (sf) { pushMsg('a', sf, 'urgent'); return; }
-  if (!st.ctx) { pushMsg('a', 'Search a city first and I will answer from its live air data.'); return; }
+  if (!st.ctx || st.demo || st.stale) { pushMsg('a', 'Search a city first and I will answer from its live air data.'); return; }
   busy = true; const fb = S.answer(en || q, st.ctx), t = pushMsg('a', 'Thinking…', 'typing'); let a = null;
   if (location.protocol.startsWith('http')) { try { a = await viaServer(q); } catch (_) {} }
   t.textContent = a || fb; t.classList.remove('typing'); $('log').scrollTop = $('log').scrollHeight;

@@ -10,9 +10,10 @@ module.exports = async function ask(req) {
   const b = req.body;
   if (g.tooBig(b)) return R(413, { error: 'Request too large' });
   if (!b || typeof b !== 'object') return R(400, { error: 'Invalid JSON' });
-  const ctx = S.validateCtx(b.ctx), q = S.cleanQuery(b.q);
+  const q = S.cleanQuery(b.q);
+  const sf = S.safety(b.q, b.ctx && b.ctx.lang); if (sf) return R(200, { answer: sf, source: 'safety' });
+  const ctx = S.validateCtx(b.ctx);
   if (!ctx || !q) return R(400, { error: 'Missing or invalid question or air data' });
-  const sf = S.safety(q, ctx.lang); if (sf) return R(200, { answer: sf, source: 'safety' });
   if (inflight >= 20) return R(503, { error: 'Busy, try again' });
   inflight++;
   try {
