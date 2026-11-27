@@ -12,7 +12,7 @@ let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v));return true; } catch (_) {return false;} }
 };
 async function jget(u, timeout=8000) {
   const c = new AbortController(), t = setTimeout(() => c.abort(), timeout);
@@ -396,70 +396,8 @@ $('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;i
 $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderFamily();};
 // Populate non-visible feature views only when opened.
 
-let reports=store.get('svasa_reports',[]);
-if(!Array.isArray(reports))reports=[];
-function recentReports(){const cutoff=Date.now()-7*86400000;return reports.filter(x=>x&&Date.parse(x.createdAt)>=cutoff&&Number.isFinite(x.exposure)&&typeof x.city==='string').slice(0,100);}
-function renderReports(){
-  const entries=recentReports();
-  $('reportsummary').textContent=entries.length?entries.length+' saved projected schedules · '+entries.filter(x=>x.changePct>0).length+' lower than their preferred schedule.':'No saved plans yet. Optimize a day and choose Save projected schedule.';
-  $('reportlist').innerHTML=entries.map(x=>'<article class="reportentry"><h3>'+esc(x.city)+'</h3><small>'+esc(new Date(x.createdAt).toLocaleString())+'</small><p><strong>'+x.exposure.toFixed(1)+' µg·h/m³</strong> projected concentration-time proxy'+(Number.isFinite(x.changePct)?' · '+x.changePct+'% reduction versus preferred schedule':'')+'</p><p class="muted">Model forecast, not measured personal exposure.</p></article>').join('');
-  $('exportreport').disabled=!entries.length;$('clearreport').disabled=!reports.length;
-}
-$('saveplan').onclick=()=>{if(!currentPlan||!forecast().length)return;reports=[currentPlan,...recentReports()].slice(0,100);store.set('svasa_reports',reports);invalidatePlan();renderReports();show('reports');};
-$('clearreport').onclick=()=>{reports=[];store.set('svasa_reports',reports);renderReports();};
-$('exportreport').onclick=()=>{const data={method:'Projected outdoor PM2.5 concentration × hours; not actual exposure or inhaled dose',plans:recentReports()};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-projected-plans.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-renderReports();
-
-/* Optional local-only usability evidence. No analytics or remote submission. */
-let feedback=store.get('svasa_feedback',[]);if(!Array.isArray(feedback))feedback=[];
-function renderFeedback(){const n=feedback.length;$('feedbacksummary').textContent=n?n+' local responses saved. Export only if you choose to share them.':'No feedback submitted on this device.';$('exportfeedback').disabled=!n;$('clearfeedback').disabled=!n;}
-$('feedbackform').onsubmit=e=>{e.preventDefault();const task=$('feedbacktask').value,trust=$('feedbacktrust').value,ease=Number($('feedbackease').value);if(!['yes','partly','no'].includes(task)||!['yes','partly','no'].includes(trust)||!Number.isInteger(ease)||ease<1||ease>5)return;feedback=[{task,trust,ease},...feedback].slice(0,100);store.set('svasa_feedback',feedback);e.target.reset();renderFeedback();};
-$('exportfeedback').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({method:'Optional self-reported usability responses; local device; no clinical outcomes',responses:feedback},null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-usability-feedback.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-$('clearfeedback').onclick=()=>{feedback=[];store.set('svasa_feedback',feedback);renderFeedback();};renderFeedback();
-
-/* Optional opt-in Web Push. No background location tracking. */
-let pushConfig=null;
-const pushStatus=s=>{$('pushstatus').textContent=s;};
-async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
-async function initPush(){
- if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window))return;
- try{
-  const r=await fetch('/api/push');if(!r.ok)return;pushConfig=await r.json();
-  const existing=store.get('svasa_push',null);
-  $('pushoff').hidden=!existing;$('pushtest').hidden=!existing||!pushConfig.enabled;
-  $('pushon').hidden=!pushConfig.enabled;$('pushthreshold').hidden=!pushConfig.enabled;
-  if(existing)pushStatus('Saved subscription for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or disable it here.');
- }catch(_){}
-}
-$('pushon').onclick=async()=>{
- if(!pushConfig?.enabled||!st.place||!st.data||st.demo||st.stale){pushStatus('Load a fresh city reading first.');return;}
- const place={lat:st.place.lat,lon:st.place.lon},city=st.place.name,threshold=Number($('pushlevel').value),btn=$('pushon');btn.disabled=true;
- try{
-  if(await Notification.requestPermission()!=='granted')throw Error('Notification permission not granted');
-  const reg=await navigator.serviceWorker.ready;
-  let sub=await reg.pushManager.getSubscription();
-  const old=store.get('svasa_push',null);
-  if(sub&&!old){await sub.unsubscribe();sub=null;}
-  const k=pushConfig.publicKey.replace(/-/g,'+').replace(/_/g,'/'),bytes=Uint8Array.from(atob(k+'='.repeat((4-k.length%4)%4)),c=>c.charCodeAt(0));
-  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
-  const token=old?.endpoint===sub.endpoint?old.token:Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
-  // Save ownership token before network submission so the user can retry or revoke it.
-  store.set('svasa_push',{endpoint:sub.endpoint,token,city,threshold});
-  $('pushoff').hidden=false;
-  await pushApi({action:'subscribe',subscription:sub.toJSON(),token,place,threshold});
-  $('pushtest').hidden=false;
-  pushStatus('Background alerts enabled for '+city+' · US AQI '+threshold+'+. Scheduled checks, not real-time alerts.');
- }catch(e){pushStatus(e.message+'; you can retry or disable the subscription.');}finally{btn.disabled=false;}
-};
-$('pushoff').onclick=async()=>{
- const old=store.get('svasa_push',null);if(!old)return;
- try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;$('pushtest').hidden=true;$('pushreceived').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
-};
-$('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});$('pushreceived').hidden=false;pushStatus('Test accepted by the push service. Check your device notifications, then confirm receipt only if you actually saw it.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
-$('pushreceived').onclick=()=>{store.set('svasa_push_receipt',{confirmedAt:new Date().toISOString(),method:'user-confirmed'});$('pushreceived').hidden=true;pushStatus('Receipt confirmed by you on this device.');};
-if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-test-shown'){ $('pushreceived').hidden=false;pushStatus('The browser displayed a test notification. Confirm only if you saw it.');}});
-const alertsPanel=$('pushon').closest('.card');
-if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)){observer.disconnect();initPush();}},{rootMargin:'160px'});observer.observe(alertsPanel);}else initPush();
+window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,show,banner});
+window.SvasaPushUI.init({$,store,st});
 
 /* ---------- boot ---------- */
 show(location.hash.slice(1));
