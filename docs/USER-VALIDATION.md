@@ -17,3 +17,5 @@ No independent participants have been evaluated yet. Automated browser checks us
 
 ### Notification validation boundary
 The automated production-browser suite exercises the deployed service worker with a Chromium-simulated push, checks the browser notification object and receipt prompt, and closes the test notification without clicking human confirmation. For end-to-end transport, a consenting user on a physical device must enable background alerts, permit notifications, send a test and confirm only after seeing it. Record browser/OS, result and date; unsubscribe after testing if desired.
+
+The notification settings panel now provides a local self-reported delivery receipt export. After actually seeing a test notification, the participant may click I received it, then Export delivery result. The export contains a timestamp and confirmation method only (no endpoint, token, location or device identifiers). The automated test intentionally does not create this receipt. Participants can clear it locally. A receipt is self-report, not independent transport validation.

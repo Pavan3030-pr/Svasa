@@ -370,7 +370,7 @@ $('clearfeedback').onclick=()=>{if(!store.set('svasa_feedback',[])){$('feedbacks
  const valid=x=>x&&typeof x.id==='string'&&x.id.length<=100&&typeof x.title==='string'&&typeof x.body==='string'&&Number.isFinite(x.at)&&x.at>Date.now()-7*day&&x.at<=Date.now()+60000&&views.has(x.view);
  function read(){const x=store.get(key,null);if(!x||!Array.isArray(x.items))return {items:[],clearedAt:0};const clearedAt=Number.isFinite(x.clearedAt)?x.clearedAt:0;return {items:x.items.filter(valid).filter(e=>e.at>clearedAt).sort((a,b)=>b.at-a.at).slice(0,50),clearedAt};}
  state=read();
- function paint(){const n=state.items.filter(x=>!x.read).length;$('notificationcount').textContent=n>99?'99+':String(n);$('notificationcount').hidden=!n;$('notificationbell').setAttribute('aria-label','Notifications, '+n+' unread');if(!dialog.open)return;
+ function paint(){state.items=state.items.filter(valid);const n=state.items.filter(x=>!x.read).length;$('notificationcount').textContent=n>99?'99+':String(n);$('notificationcount').hidden=!n;$('notificationbell').setAttribute('aria-label','Notifications, '+n+' unread');if(!dialog.open)return;
   $('notificationempty').hidden=!!state.items.length;$('notificationread').disabled=!n;$('notificationclear').disabled=!state.items.length;
   const list=$('notificationlist'),frag=document.createDocumentFragment();for(const x of state.items){const b=document.createElement('button'),dot=document.createElement('span'),copy=document.createElement('span'),title=document.createElement('strong'),body=document.createElement('span'),time=document.createElement('small');b.type='button';b.className='notificationitem';b.dataset.id=x.id;b.dataset.unread=String(!x.read);dot.className='notificationdot';dot.setAttribute('aria-hidden','true');title.textContent=x.title;body.className='notificationbody';body.textContent=x.body;time.textContent=new Date(x.at).toLocaleString();copy.append(title,body,time);b.append(dot,copy);frag.append(b);}list.replaceChildren(frag);
  }
@@ -401,6 +401,12 @@ $('clearfeedback').onclick=()=>{if(!store.set('svasa_feedback',[])){$('feedbacks
 /* Optional opt-in Web Push. No background location tracking. */
 let pushConfig=null;
 const pushStatus=s=>{$('pushstatus').textContent=s;};
+const receiptKey='svasa_push_receipt';
+function currentReceipt(){const r=store.get(receiptKey,null);if(!r||r.method!=='user-confirmed'||typeof r.confirmedAt!=='string'||!Number.isFinite(Date.parse(r.confirmedAt))||Date.parse(r.confirmedAt)>Date.now()+60000)return null;return {confirmedAt:r.confirmedAt,method:'user-confirmed'};}
+function renderReceipt(){const r=currentReceipt();$('receiptstatus').textContent=r?'Last self-reported receipt: '+new Date(r.confirmedAt).toLocaleString():'No user-confirmed delivery recorded on this device.';$('exportreceipt').disabled=!r;$('clearreceipt').disabled=!r;}
+$('exportreceipt').onclick=()=>{const r=currentReceipt();if(!r)return;const url=URL.createObjectURL(new Blob([JSON.stringify({scope:'Self-reported device notification receipt; not independent transport verification',...r},null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-notification-receipt.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('clearreceipt').onclick=()=>{if(store.set(receiptKey,null))renderReceipt();else pushStatus('Could not clear local delivery result.');};
+renderReceipt();
 async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
 async function initPush(){
  if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window)){pushStatus('Background push is unavailable in this browser.');return;}
@@ -437,7 +443,7 @@ $('pushoff').onclick=async()=>{
  try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;$('pushtest').hidden=true;$('pushreceived').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
 };
 $('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});$('pushreceived').hidden=false;pushStatus('Test accepted by the push service. Check your device notifications, then confirm receipt only if you actually saw it.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
-$('pushreceived').onclick=()=>{store.set('svasa_push_receipt',{confirmedAt:new Date().toISOString(),method:'user-confirmed'});$('pushreceived').hidden=true;pushStatus('Receipt confirmed by you on this device.');};
+$('pushreceived').onclick=()=>{if(!store.set(receiptKey,{confirmedAt:new Date().toISOString(),method:'user-confirmed'})){pushStatus('Could not save your confirmation on this device.');return;}$('pushreceived').hidden=true;renderReceipt();pushStatus('Receipt confirmed by you on this device.');};
 if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-test-shown'){ $('pushreceived').hidden=false;pushStatus('The browser displayed a test notification. Confirm only if you saw it.');}});
 root.addEventListener('svasa-alert-settings',initPush);
 
