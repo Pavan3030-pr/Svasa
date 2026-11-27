@@ -35,7 +35,8 @@ async function load(p) {
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
   st.ctx = null; st.data = null; invalidatePlan(); $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
-  if(!$('hero').querySelector('.loadingring'))$('hero').innerHTML='<div class="ring loadingring" aria-hidden="true"><div><b>—</b><span>US AQI</span></div></div><div><p class="eyebrow">Retrieving model data</p><h1>Checking the air</h1><p class="lead" role="status">Loading current air data…</p></div>';
+  $('aqiring').classList.add('loadingring');$('aqiring').setAttribute('aria-label','Air quality loading');$('aqiring').style.setProperty('--p',0);$('aqivalue').textContent='—';$('aqimeta').textContent='Retrieving model data';$('aqiverdict').textContent='Checking the air';$('aqilead').textContent='Loading current air data…';$('aqichips').innerHTML='<span class="chip2">Modelled data · Open-Meteo</span>';$('goplan').disabled=true;$('share').disabled=true;
+  $('adv').textContent='Loading current guidance…';$('alert').textContent='';$('pol').textContent='Loading pollutant readings…';$('strip').textContent='Loading hourly forecast…';$('win').textContent='Loading forecast…';$('chart').textContent='';$('hist').textContent='';$('histtxt').textContent='Loading history…';$('disp').textContent='';st.hrs=[];
   st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   st.wx=null;
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
@@ -67,28 +68,18 @@ async function load(p) {
 function render() {
   const c = st.data.current, aqi = c.us_aqi, b = S.band(aqi), a = S.advice(aqi, st.profile), dom = S.dominant(c);
   const hrs = S.hourlyFrom(st.data, c.time), win = S.bestWindow(hrs, 2), tr = S.trend(hrs);
-  const root = document.documentElement.style; root.setProperty('--c', b.color); root.setProperty('--t', b.bg); root.setProperty('--ci', b.ink);
+  const root = document.querySelector('.main').style; root.setProperty('--c', b.color); root.setProperty('--t', b.bg); root.setProperty('--ci', b.ink);
   st.ctx = { aqi, profile: st.profile, dominant: dom, window: win, trend: tr, city: st.place.name, wx: st.wx };
 
   const ind = !st.demo&&!st.stale?S.indiaModel24(st.data,c.time):null, wn = S.windNote(st.wx && st.wx.w, aqi);
   const status = st.demo ? 'Sample data' : st.stale ? 'Offline snapshot' : 'Live';
   const trendLabel = { rising: '↗ Worsening', falling: '↘ Improving', steady: '→ Steady' }[tr];
-  $('hero').innerHTML =
-    `<div class="ring" style="--p:0" role="img" aria-label="US AQI ${Math.round(aqi)}"><div><b>${Math.round(aqi)}</b><span>US AQI</span></div></div>
-     <div><p class="eyebrow">${esc(st.place.name)} · ${status} · ${esc(c.time.replace('T',' '))}</p>
-     <h1>${esc(b.label)}</h1>
-     <p class="verdict">${esc(st.demo || st.stale ? 'Reference only · not current' : S.verdict(aqi, st.profile))}</p>
-     <p class="lead">${esc(st.demo || st.stale ? 'Current guidance is unavailable.' : a.go)}${dom ? ' Main driver: ' + S.POLLUTANTS[dom].name + '.' : ''}${wn ? ' ' + esc(wn) : ''}</p>
-     <div class="chips-row">
-       <span class="chip2">${trendLabel}</span>
-       <span class="chip2" title="Modelled estimate from Open-Meteo / CAMS, not a street monitor">Modelled data · Open-Meteo</span>
-       ${ind ? `<span class="chip2" title="Partial model-based estimate using ${ind.pollutants.length} of eight pollutants, not official CPCB AQI">India scale (partial) ${ind.aqi} · ${esc(ind.label)}</span>` : ''}
-       ${win ? `<span class="chip2">Cleanest ${win.start.slice(11, 16)}–${win.end.slice(11, 16)}</span>` : ''}
-       <span class="chip2" id="weatherchip"${st.wx?'':' hidden'}>${st.wx?`${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h`: ''}</span>
-       <button type="button" class="btn sm" id="goplan">Plan my day</button>
-       <button type="button" class="btn ghost sm" id="share">Share</button>
-     </div></div>`;
-  const ring = $('hero').querySelector('.ring'); if(ring)ring.style.setProperty('--p',Math.min(100,aqi/3));
+  const ring=$('aqiring');ring.classList.remove('loadingring');ring.setAttribute('aria-label','US AQI '+Math.round(aqi));ring.style.setProperty('--p',Math.min(100,aqi/3));$('aqivalue').textContent=Math.round(aqi);
+  $('aqimeta').textContent=st.place.name+' · '+status+' · '+c.time.replace('T',' ');
+  $('aqiverdict').textContent=b.label+' · '+(st.demo||st.stale?'Reference only · not current':S.verdict(aqi,st.profile));
+  $('aqilead').textContent=(st.demo||st.stale?'Current guidance is unavailable.':a.go)+(dom?' Main driver: '+S.POLLUTANTS[dom].name+'.':'')+(wn?' '+wn:'');
+  $('aqichips').innerHTML=`<span class="chip2">${trendLabel}</span><span class="chip2" title="Modelled estimate, not a street monitor">Modelled data · Open-Meteo</span>${ind?`<span class="chip2" title="Partial model-based estimate using ${ind.pollutants.length} of eight pollutants, not official CPCB AQI">India scale (partial) ${ind.aqi} · ${esc(ind.label)}</span>`:''}${win?`<span class="chip2">Cleanest ${win.start.slice(11,16)}–${win.end.slice(11,16)}</span>`:''}<span class="chip2" id="weatherchip"${st.wx?'':' hidden'}>${st.wx?`${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h`:''}</span>`;
+  $('goplan').disabled=!!(st.demo||st.stale);$('share').disabled=false;
   $('goplan').onclick = () => show('plan');
   $('share').onclick = async () => {
     const t = `${st.place.name} (${status}): AQI ${Math.round(aqi)} (${b.label}). ${st.demo || st.stale ? 'Reference only.' : a.go} via Svasa`;
@@ -473,6 +464,6 @@ if('IntersectionObserver'in window){const observer=new IntersectionObserver(entr
 /* ---------- boot ---------- */
 show(location.hash.slice(1));
 const last = store.get('svasa_last', null);
-if (last && last.p) { if (S.PROFILES[last.profile]) { st.profile = last.profile; $('profile').value = last.profile; } load(last.p); }
+if (last && last.p && Number.isFinite(last.p.lat)&&Number.isFinite(last.p.lon)&&Math.abs(last.p.lat)<=90&&Math.abs(last.p.lon)<=180&&typeof last.p.name==='string') { if (Object.hasOwn(S.PROFILES,last.profile)) { st.profile = last.profile; $('profile').value = last.profile; } load(last.p); }
 else load({ name: 'Delhi, India', lat: 28.6139, lon: 77.209 });
 })();
