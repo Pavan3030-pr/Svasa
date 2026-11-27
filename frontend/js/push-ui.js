@@ -36,16 +36,16 @@
 /* Optional opt-in Web Push. No background location tracking. */
 let pushConfig=null;
 const pushStatus=s=>{$('pushstatus').textContent=s;};
-async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
+async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
 async function initPush(){
  if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window)){pushStatus('Background push is unavailable in this browser.');return;}
  try{
-  const r=await fetch('/api/push');if(!r.ok)return;pushConfig=await r.json();
+  const r=await fetch('/api/push',{signal:AbortSignal.timeout(5000)});if(!r.ok){pushStatus('Background alert settings unavailable. Try reopening settings.');return;}pushConfig=await r.json();
   const existing=store.get('svasa_push',null);
   $('pushoff').hidden=!existing;$('pushtest').hidden=!existing||!pushConfig.enabled;
   $('pushon').hidden=!pushConfig.enabled;$('pushthreshold').hidden=!pushConfig.enabled;
   if(existing)pushStatus('Saved subscription for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or disable it here.');
- }catch(_){}
+ }catch(_){pushStatus('Background alert settings unavailable. Try reopening settings.');}
 }
 $('pushon').onclick=async()=>{
  if(!pushConfig?.enabled||!st.place||!st.data||st.demo||st.stale){pushStatus('Load a fresh city reading first.');return;}

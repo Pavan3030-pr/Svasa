@@ -399,16 +399,16 @@ $('clearfeedback').onclick=()=>{if(!store.set('svasa_feedback',[])){$('feedbacks
 /* Optional opt-in Web Push. No background location tracking. */
 let pushConfig=null;
 const pushStatus=s=>{$('pushstatus').textContent=s;};
-async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
+async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
 async function initPush(){
  if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window)){pushStatus('Background push is unavailable in this browser.');return;}
  try{
-  const r=await fetch('/api/push');if(!r.ok)return;pushConfig=await r.json();
+  const r=await fetch('/api/push',{signal:AbortSignal.timeout(5000)});if(!r.ok){pushStatus('Background alert settings unavailable. Try reopening settings.');return;}pushConfig=await r.json();
   const existing=store.get('svasa_push',null);
   $('pushoff').hidden=!existing;$('pushtest').hidden=!existing||!pushConfig.enabled;
   $('pushon').hidden=!pushConfig.enabled;$('pushthreshold').hidden=!pushConfig.enabled;
   if(existing)pushStatus('Saved subscription for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or disable it here.');
- }catch(_){}
+ }catch(_){pushStatus('Background alert settings unavailable. Try reopening settings.');}
 }
 $('pushon').onclick=async()=>{
  if(!pushConfig?.enabled||!st.place||!st.data||st.demo||st.stale){pushStatus('Load a fresh city reading first.');return;}
@@ -452,7 +452,7 @@ const WX = 'https://api.open-meteo.com/v1/forecast';
 const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask', 'family', 'reports'];
 const st = { profile: 'general', place: null, data: null, wx: null, demo: false, stale: null, ctx: null, lang: 'en', hist: [], serverAI: false };
 let capabilities=null;
-let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer, inbox=null;
+let busy = false, cmp = [], lastLvl = null, lastAlertProfile=null, alertsOn = false, deferredInstall = null, suggTimer, inbox=null;
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = {
@@ -478,7 +478,7 @@ const snapKey=p=>'svasa_snap_v2_'+Number(p.lat).toFixed(4)+','+Number(p.lon).toF
 function usableReading(d){return !!(d&&d.current&&S.band(d.current.us_aqi)&&typeof d.current.time==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.current.time)&&Number.isFinite(Date.parse(d.current.time+'Z')));}
 function usableSnapshot(s){return !!(s&&Number.isFinite(s.at)&&s.at>0&&s.at<=Date.now()+60000&&usableReading(s.data));}
 async function load(p) {
-  const seq = ++loadSequence;historyReading=null;historyRequest=null;
+  const seq = ++loadSequence;historyReading=null;historyRequest=null;$('refreshair').disabled=true;$('refreshair').querySelector('span').textContent='Refreshing…';
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
   st.ctx = null; st.data = null; renderRail(null,[],null); invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
@@ -502,7 +502,7 @@ async function load(p) {
   if (seq !== loadSequence) return;
   store.set('svasa_last', { p, profile: st.profile });
   $('v-today').classList.remove('loading');
-  render(); loadStation();
+  render();$('refreshair').disabled=false;$('refreshair').querySelector('span').textContent='Refresh air';loadStation();
   if(location.hash==='#cities')drawCities();
   const w=await jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`,5000).then(x=>x.current).catch(()=>null);
   if(seq!==loadSequence||!w||![w.temperature_2m,w.relative_humidity_2m,w.wind_speed_10m].every(Number.isFinite))return;
@@ -646,7 +646,7 @@ async function loadStation() {
   try {
     const cfg=await getCapabilities();if(st.place!==p)return;
     if(cfg&&cfg.stations===false){$('gs').textContent='Ground monitoring is not configured. Showing model estimates only.';return;}
-    const r = await fetch(`/api/stations?lat=${p.lat}&lon=${p.lon}`); if (!r.ok) { if(st.place===p)$('gs').textContent='Station data unavailable. Showing model estimates only.';return; }
+    const r = await fetch(`/api/stations?lat=${p.lat}&lon=${p.lon}`,{signal:AbortSignal.timeout(12000)}); if (!r.ok) { if(st.place===p)$('gs').textContent='Station data unavailable. Showing model estimates only.';return; }
     const j = await r.json(); if (st.place === p&&st.data) drawStation(j.station);
   } catch (_) {if(st.place===p)$('gs').textContent='Station service unavailable. Showing model estimates only.';}
 }
@@ -751,11 +751,12 @@ async function show_(t, b) {
 }
 function notifyCheck(aqi) {
   const l = S.effectiveLevel(aqi, st.profile), thr = +($('thr').value || 2);
-  if ((lastLvl===null&&l>=thr)||(lastLvl!==null&&l!==lastLvl&&(l>=thr||lastLvl>=thr))){
-    const title=(lastLvl===null?'Air quality advisory':l>lastLvl?'Air quality worsened':'Air quality improved')+' · '+st.place.name,body='Modelled US AQI '+Math.round(aqi)+': '+S.band(aqi).label+'. '+S.advice(aqi,st.profile).go;
-    inbox?.emit(title,body,'today');if(alertsOn&&lastLvl!==null)show_(title,body);
+  const profileChanged=lastAlertProfile!==null&&lastAlertProfile!==st.profile,previous=profileChanged?null:lastLvl;
+  if ((previous===null&&l>=thr)||(previous!==null&&l!==previous&&(l>=thr||previous>=thr))){
+    const title=(profileChanged?'Profile guidance updated':previous===null?'Air quality advisory':l>previous?'Air quality worsened':'Air quality improved')+' · '+st.place.name,body='Modelled US AQI '+Math.round(aqi)+': '+S.band(aqi).label+'. '+S.advice(aqi,st.profile).go;
+    inbox?.emit(title,body,'today');if(alertsOn&&previous!==null)show_(title,body);
   }
-  lastLvl = l;
+  lastLvl=l;lastAlertProfile=st.profile;
 }
 
 /* ---------- search ---------- */
@@ -801,6 +802,8 @@ function show(v) {
 /* ---------- wiring ---------- */
 $('nav').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
 $('profile').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('');
+$('refreshair').onclick=()=>{if(st.place&&!$('refreshair').disabled)load(st.place);};
+const savedThreshold=store.get('svasa_alert_threshold',2);$('thr').value=[1,2,3].includes(savedThreshold)?String(savedThreshold):'2';$('thr').onchange=()=>store.set('svasa_alert_threshold',Number($('thr').value));
 $('profile').onchange = e => { st.profile = e.target.value; if(st.place)store.set('svasa_last',{p:st.place,profile:st.profile});if (st.data) render(); };
 $('q').addEventListener('input', e => { $('sugg').hidden = true; clearTimeout(suggTimer); suggTimer = setTimeout(() => suggest(e.target.value), 250); });
 $('q').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { const b = $('sugg').querySelector('button'); if (b) { e.preventDefault(); b.focus(); } } if (e.key === 'Escape') $('sugg').hidden = true; });
@@ -843,7 +846,7 @@ pushMsg('a', 'Hi, I am Svasa. Ask me about the air in your city, when to go out,
 function getCapabilities(){if(!capabilities)capabilities=fetch('/api/health',{signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)throw Error('Health unavailable');return r.json();}).catch(()=>{capabilities=null;return null;});return capabilities;}
 function refreshAIMode(){getCapabilities().then(j=>{st.serverAI=!!j?.ai;$('aimode').textContent=st.serverAI?'Gemini available · fallback supported':'Rule-based answers';});}
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
-setInterval(() => { if (st.place && !document.hidden && !busy) load(st.place); }, 5 * 60 * 1000);
+setInterval(() => { if (st.place && !document.hidden && !busy&&!$('refreshair').disabled) load(st.place); }, 5 * 60 * 1000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {const register=()=>navigator.serviceWorker.register('sw.js').catch(()=>{});window.addEventListener('load',()=>{if('requestIdleCallback'in window)requestIdleCallback(register,{timeout:2500});else setTimeout(register,100);},{once:true});}
 
 $('onbchips').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<button type="button" class="chip" data-k="${k}">${esc(v.name)}</button>`).join('');
