@@ -9,7 +9,7 @@ SVASA turns air-quality forecasts into practical, constraint-aware outdoor decis
 ## Application gallery
 
 <!-- SVASA_GALLERY_START -->
-Actual application UI captured by automated Chromium on commit 3c83d88. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46018202847).
+Actual application UI captured by automated Chromium on commit 717435f. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46019444969).
 
 ### Landing experience
 ![SVASA landing page](docs/screenshots/current/landing-desktop.png)
