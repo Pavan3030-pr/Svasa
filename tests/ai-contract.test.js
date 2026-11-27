@@ -23,4 +23,18 @@ for(const [lang,text] of [['hi','सावधानी रखें।'],['te','
  check(validateResponse(JSON.stringify(base),ctx)===null);
  check(validateResponse(JSON.stringify({...base,recommendation:text,reason:text}),ctx)===null);
 }
+for(const [lang,good,unsafe,wrong] of [
+ ['hi','सावधानी रखें।','पूरी तरह सुरक्षित','AQI ९९९'],
+ ['te','జాగ్రత్తలు తీసుకోండి.','పూర్తిగా సురక్షితం','AQI ౯౯౯'],
+ ['ta','கவனமாக இருங்கள்.','முற்றிலும் பாதுகாப்பானது','AQI ௯௯௯'],
+ ['bn','সতর্ক থাকুন।','সম্পূর্ণ নিরাপদ','AQI ৯৯৯']
+]){
+ const ctx={aqi:150,pm25:50,lang,profile:'child',window:{avg:80,start:'2026-11-27T10:00',end:'2026-11-27T12:00'}};
+ const valid={kind:'air',recommendation:good,reason:good,limitation:good};
+ check(validateResponse(JSON.stringify(valid),ctx)!==null);
+ check(validateResponse(JSON.stringify({...valid,recommendation:unsafe}),ctx)===null);
+ check(validateResponse(JSON.stringify({...valid,reason:good+' '+wrong}),ctx)===null);
+ check(validateResponse(JSON.stringify({...valid,reason:good+' 19:00'}),ctx)===null);
+ check(validateResponse(JSON.stringify({...valid,reason:good+' PM2.5 500 µg/m³'}),ctx)===null);
+}
 console.log(cases+' deterministic AI contract and multilingual safety cases passed (not live model evaluations)');

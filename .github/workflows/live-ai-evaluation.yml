@@ -1,6 +1,9 @@
 name: SVASA strict live Gemini evaluation
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['backend/lib/gemini.js', 'frontend/js/intelligence.js', 'tests/ai-contract.test.js', '.github/workflows/live-ai-evaluation.yml']
 permissions:
   contents: read
 jobs:
