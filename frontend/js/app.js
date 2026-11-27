@@ -18,7 +18,7 @@ async function jget(u, timeout=8000) {
   try { const r = await fetch(u, { signal: c.signal }); if (!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
   finally { clearTimeout(t); }
 }
-function banner(msg) { const b = $('banner'); b.hidden = !msg; b.textContent = msg || ''; }
+function banner(msg) { const b = $('banner'); b.classList.toggle('neutral',!msg); b.textContent = msg || 'Modelled air-quality estimates, not street-monitor readings.'; }
 const legend = () => '<div class="legend">' + S.BANDS.map(b => `<span><i style="background:${b.color}"></i>${b.label}</span>`).join('') + '</div>';
 
 /* ---------- data ---------- */
@@ -32,7 +32,7 @@ async function load(p) {
   const seq = ++loadSequence;
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
   st.ctx = null; st.data = null; invalidatePlan(); $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
-  $('gcard').hidden = true;
+  $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
   $('hero').innerHTML='<div class="ring loadingring" aria-hidden="true"><div><b>—</b><span>US AQI</span></div></div><div><p class="eyebrow">Retrieving model data</p><h1>Checking the air</h1><p class="lead" role="status">Loading current air data…</p></div>';
   st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   st.wx=null;

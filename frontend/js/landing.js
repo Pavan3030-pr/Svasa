@@ -18,7 +18,7 @@ function paintHero(aqi, win) {
 async function run() {
   const out = await Promise.all(CITIES.map(async (c,i) => { try { const d = await get(URL_(c[1], c[2],i===0?'&hourly=us_aqi&forecast_days=2':'')); const age=S.readingAge(d);if(age===null||age>3||age< -1)return null;if(i===0)paintHero(d.current.us_aqi,S.bestWindow(S.hourlyFrom(d,d.current.time),2)); return { name: c[0], aqi: d.current.us_aqi }; } catch (_) { return null; } }));
   const ok = out.filter(x => x && S.band(x.aqi));
-  $('ticker').innerHTML = ok.map(x => { const b = S.band(x.aqi); return `<div class="tk" style="--c:${b.color}"><small>${esc(x.name)}</small><b style="color:${b.ink}">${Math.round(x.aqi)}</b><span>${esc(b.label)}</span></div>`; }).join('');
+  $('ticker').innerHTML = CITIES.map((city,i)=>{const x=out[i],b=x&&S.band(x.aqi);return b?`<div class="tk" style="--c:${b.color}"><small>${esc(x.name)}</small><b style="color:${b.ink}">${Math.round(x.aqi)}</b><span>${esc(b.label)}</span></div>`:`<div class="tk"><small>${esc(city[0])}</small><b>—</b><span>Unavailable</span></div>`;}).join('');
   $('tickNote').textContent = ok.length ? 'Modelled estimates from Open-Meteo / CAMS, refreshed when you open the page. Not a street monitor.' : 'Live readings are unavailable right now. Open the app to try again.';
 }
 run();

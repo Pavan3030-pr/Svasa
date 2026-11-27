@@ -29,7 +29,7 @@
 
   <div class="main">
     <header class="top">
-      <div class="citypill" id="city" aria-live="polite"></div>
+      <div class="citypill" id="city" aria-live="polite">Delhi, India</div>
       <form id="f" class="search" role="search" autocomplete="off">
         <input id="q" type="search" placeholder="Search any city" aria-label="Search city" maxlength="80">
         <div id="sugg" hidden></div>
@@ -37,22 +37,22 @@
       <button type="button" id="loc" class="btn ghost">Near me</button>
       <label class="sel"><span>Profile</span><select id="profile" aria-label="Health profile"></select></label>
     </header>
-    <div id="banner" class="banner" hidden role="status"></div>
+    <div id="banner" class="banner neutral" role="status">Modelled air-quality estimates, not street-monitor readings.</div>
 
     <main id="content">
       <section id="v-today" class="view">
-        <div class="card onb" id="onb" hidden><h2>Who are you breathing for?</h2><p class="muted">Pick a profile and Svasa tunes every tip to it. You can change it any time from the Profile menu.</p><div class="chips" id="onbchips"></div><div class="row" style="margin-top:12px"><button type="button" class="btn ghost sm" id="onbskip">Skip for now</button></div></div>
-        <div class="hero card" id="hero"><div class="skel" aria-busy="true"></div></div>
+        <div class="hero card" id="hero"><div class="ring loadingring" aria-hidden="true"><div><b>—</b><span>US AQI</span></div></div><div><p class="eyebrow">Retrieving model data</p><h1>Checking the air</h1><p class="lead" role="status">Loading current air data…</p></div></div>
         <details class="card about"><summary>How to read these numbers</summary>
           <p><b>US AQI</b> is supplied by the atmospheric model. Pollutant-specific averaging periods differ. The optional India-scale number is a partial model estimate using at least three of four available 24-hour pollutants, including particulate matter, and at least 16 hourly values per pollutant. CO, ozone, ammonia and lead are excluded, so the estimate may understate the full index. It is not an official CPCB AQI.</p>
           <p>The pollutant concentrations below are <b>current hourly readings</b>, so they can look higher or lower than the AQI, which smooths over the day.</p>
           <p><b>Data source:</b> Open-Meteo / Copernicus CAMS atmospheric model. These are modelled estimates for a grid cell, not readings from a monitor on your street.</p></details>
-        <div class="card" id="gcard" hidden><div class="cardhead"><h2>Ground check</h2><span class="pill brand">Nearest monitoring station · OpenAQ</span></div><div id="gs"></div></div>
-        <div class="card"><div class="cardhead"><h2>Next 12 hours</h2><span class="muted" style="margin:0">US AQI by hour</span></div><div id="strip" class="strip scroll"></div></div>
+        <div class="card" id="gcard"><div class="cardhead"><h2>Ground check</h2><span class="pill brand">Nearest monitoring station · OpenAQ</span></div><div id="gs"><p class="muted">Monitoring station details appear when available.</p></div></div>
+        <div class="card"><div class="cardhead"><h2>Next 12 hours</h2><span class="muted" style="margin:0">US AQI by hour</span></div><div id="strip" class="strip scroll"><p class="muted">Loading hourly forecast…</p></div></div>
         <div class="grid2">
           <div class="card"><h2>What to do now</h2><div class="tiles" id="adv"></div><div id="alert"></div></div>
           <div class="card"><h2>What is in the air</h2><div id="pol"></div><p class="foot">Current modelled concentrations. WHO 24-hour comparisons appear only when all 24 model hours are present for a relevant pollutant.</p></div>
         </div>
+                <div class="card onb" id="onb" hidden><h2>Who are you breathing for?</h2><p class="muted">Pick a profile and Svasa tunes every tip to it. You can change it any time from the Profile menu.</p><div class="chips" id="onbchips"></div><div class="row" style="margin-top:12px"><button type="button" class="btn ghost sm" id="onbskip">Skip for now</button></div></div>
         <div class="card"><div class="cardhead"><h2>Alerts and install</h2></div>
           <div class="row"><button type="button" class="btn ghost" id="notif">Enable in-app alerts</button><button type="button" class="btn ghost" id="pushon" hidden>Enable background alerts</button><button type="button" class="btn ghost" id="pushoff" hidden>Disable background alerts</button>
           <label class="sel" id="pushthreshold" hidden><span>Background alert US AQI</span><select id="pushlevel"><option value="101">101+</option><option value="151" selected>151+</option><option value="201">201+</option></select></label><span id="pushstatus" role="status" class="muted"></span><select id="thr" aria-label="Alert level"><option value="1">From Moderate</option><option value="2" selected>From Sensitive level</option><option value="3">From Unhealthy</option></select>
