@@ -17,7 +17,7 @@ const fixture={utc_offset_seconds:0,timezone:'GMT',current:{time:stamp(current),
 const cors={'access-control-allow-origin':'*'};
 async function stub(page){
   await page.route('**/api/health',r=>r.fulfill({json:{ok:true,ai:true,stations:true,backgroundPush:false}}));
-  await page.route('https://air-quality-api.open-meteo.com/**',r=>{const u=new URL(r.request().url),lat=u.searchParams.get('latitude').split(','),lon=u.searchParams.get('longitude').split(',');if(lat.length>1)return r.fulfill({json:lat.map((v,i)=>({...fixture,latitude:Number(v),longitude:Number(lon[i]),current:{...fixture.current,us_aqi:61+i}})).reverse(),headers:cors});return r.fulfill({json:fixture,headers:cors});});
+  await page.route('https://air-quality-api.open-meteo.com/**',r=>{const u=new URL(r.request().url()),lat=u.searchParams.get('latitude').split(','),lon=u.searchParams.get('longitude').split(',');if(lat.length>1)return r.fulfill({json:lat.map((v,i)=>({...fixture,latitude:Number(v),longitude:Number(lon[i]),current:{...fixture.current,us_aqi:61+i}})).reverse(),headers:cors});return r.fulfill({json:fixture,headers:cors});});
   await page.route('https://api.open-meteo.com/**',r=>r.fulfill({json:{current:{temperature_2m:26,relative_humidity_2m:62,wind_speed_10m:10}},headers:cors}));
   await page.route('**/api/stations?**',r=>r.fulfill({json:{station:{name:'Fixture monitor',pm25:35,pm10:62,distanceKm:3,ageHours:1,time:new Date().toISOString()}}}));
   await page.route('**/api/ask',r=>{const data=r.request().postDataJSON();assert.equal(typeof data.place.lat,'number');return r.fulfill({json:{answer:'Fixture assistant response. Model data is an estimate.',source:'gemini'}});});
