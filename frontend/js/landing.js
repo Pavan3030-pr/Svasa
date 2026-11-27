@@ -5,33 +5,45 @@ const CITIES = [['Delhi', 28.6139, 77.209], ['Mumbai', 19.076, 72.8777], ['Hyder
 const tickerCells=Array.from($('ticker').querySelectorAll('.tk'));
 const URL_ = (la, lo, extra) => `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${la}&longitude=${lo}&current=us_aqi${extra || ''}&timezone=auto`;
 async function get(u) { const c = new AbortController(), t = setTimeout(() => c.abort(), 10000); try { const r = await fetch(u, { signal: c.signal }); if (!r.ok) throw new Error(r.status); return await r.json(); } finally { clearTimeout(t); } }
-
-// Static editorial content is visible without animation or observers.
-
-function paintHero(aqi, win) {
-  const b = S.band(aqi); if (!b) return;
-  // Scope dynamic color changes to the reading, not the whole page.
-  $('hAqi').style.color=b.ink;
-  $('hAqi').textContent = Math.round(aqi); $('hLabel').textContent = b.label; $('hVerdict').textContent = S.verdict(aqi, 'asthma');
-  if (win) $('hWin').textContent = win.start.slice(11, 16) + '–' + win.end.slice(11, 16);
+function reading(d){
+ const age=S.readingAge(d);return age!==null&&age<=3&&age>=-1&&S.band(d?.current?.us_aqi)?d.current.us_aqi:null;
 }
-async function cityReading(c,i){
-  try {const d=await get(URL_(c[1],c[2],i===0?'&hourly=us_aqi&forecast_days=2':''));const age=S.readingAge(d);if(age===null||age>3||age< -1||!S.band(d.current.us_aqi))return null;if(i===0)paintHero(d.current.us_aqi,S.bestWindow(S.hourlyFrom(d,d.current.time),2));return {name:c[0],aqi:d.current.us_aqi};}catch(_){return null;}
+function paintHero(aqi, win) {
+  const b = S.band(aqi);
+  $('hAqi').textContent=b?Math.round(aqi):'—';
+  $('hLabel').textContent=b?b.label:'Unavailable';
+  $('hVerdict').textContent=b?S.verdict(aqi,'asthma'):'Live data unavailable';
+  $('hWin').textContent=win?win.start.slice(11,16)+'–'+win.end.slice(11,16):'—';
+  if(b)$('hAqi').style.color=b.ink;
+}
+function paintCell(i,aqi){
+ const cell=tickerCells[i],b=S.band(aqi);if(!cell)return;
+ const number=cell.querySelector('b'),label=cell.querySelector('span');
+ number.textContent=b?Math.round(aqi):'—';label.textContent=b?b.label:'Unavailable';
+ if(b){cell.style.setProperty('--c',b.color);number.style.color=b.ink;}
 }
 let heroReading=null;
-const loadHero=()=>heroReading||(heroReading=cityReading(CITIES[0],0));
+function loadHero(){
+ if(heroReading)return heroReading;
+ heroReading=(async()=>{let aqi=null,win=null;
+ try{const d=await get(URL_(CITIES[0][1],CITIES[0][2],'&hourly=us_aqi&forecast_days=2'));aqi=reading(d);if(aqi!==null)win=S.bestWindow(S.hourlyFrom(d,d.current.time),2);}catch(_){}
+ paintHero(aqi,win);paintCell(0,aqi);return aqi;})();
+ return heroReading;
+}
 if('IntersectionObserver'in window){const heroObserver=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){heroObserver.disconnect();loadHero();}},{rootMargin:'160px'});heroObserver.observe($('hAqi'));}else loadHero();
 let started=false;
 async function run(){
-  if(started)return;started=true;
-  const out=[await loadHero()];
-  // Limit concurrent provider requests to two and update the ticker once.
-  for(let i=1;i<CITIES.length;i+=2)out.push(...await Promise.all(CITIES.slice(i,i+2).map((c,j)=>cityReading(c,i+j))));
-  const ok=out.filter(x=>x&&S.band(x.aqi));
-  out.forEach((x,i)=>{const cell=tickerCells[i],b=x&&S.band(x.aqi);if(!cell)return;const number=cell.querySelector('b'),label=cell.querySelector('span');if(!number||!label)return;number.textContent=b?Math.round(x.aqi):'—';label.textContent=b?b.label:'Unavailable';if(b){cell.style.setProperty('--c',b.color);number.style.color=b.ink;}});
-
-  $('tickNote').textContent=ok.length?'Modelled estimates from Open-Meteo / CAMS, refreshed when you open the page. Not a street monitor.':'Live readings are unavailable right now. Open the app to try again.';
+ if(started)return;started=true;
+ // One request for the remaining five cities. Model grid centres can differ from requested coordinates;
+ // validate proximity before assigning a returned value to a city.
+ const cities=CITIES.slice(1),matches=(d,c)=>Number.isFinite(d?.latitude)&&Number.isFinite(d?.longitude)&&Math.abs(d.latitude-c[1])<=1.5&&Math.abs(d.longitude-c[2])<=1.5;
+ const other=(async()=>{let rows=[];try{const d=await get(URL_(cities.map(c=>c[1]).join(','),cities.map(c=>c[2]).join(','),'&forecast_days=1'));if(Array.isArray(d))rows=d;}catch(_){}
+ const values=cities.map(c=>{const d=rows.find(r=>matches(r,c));return reading(d);});
+ // A failed batch is reported honestly; use no stale or invented readings.
+ values.forEach((v,i)=>paintCell(i+1,v));return values;})();
+ const [hero,rest]=await Promise.all([loadHero(),other]);
+ const count=[hero,...rest].filter(v=>v!==null).length;
+ $('tickNote').textContent=count?count+' of 6 cities reporting · Modelled estimates from Open-Meteo / CAMS. Not street-monitor readings.':'Live readings are unavailable right now. Open the app to try again.';
 }
 if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)){observer.disconnect();run();}},{rootMargin:'80px'});observer.observe($('ticker'));}else run();
-
 })();

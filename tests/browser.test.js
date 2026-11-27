@@ -17,7 +17,7 @@ const fixture={utc_offset_seconds:0,timezone:'GMT',current:{time:stamp(current),
 const cors={'access-control-allow-origin':'*'};
 async function stub(page){
   await page.route('**/api/health',r=>r.fulfill({json:{ok:true,ai:true,stations:true,backgroundPush:false}}));
-  await page.route('https://air-quality-api.open-meteo.com/**',r=>r.fulfill({json:fixture,headers:cors}));
+  await page.route('https://air-quality-api.open-meteo.com/**',r=>{const u=new URL(r.request().url),lat=u.searchParams.get('latitude').split(','),lon=u.searchParams.get('longitude').split(',');if(lat.length>1)return r.fulfill({json:lat.map((v,i)=>({...fixture,latitude:Number(v),longitude:Number(lon[i]),current:{...fixture.current,us_aqi:61+i}})).reverse(),headers:cors});return r.fulfill({json:fixture,headers:cors});});
   await page.route('https://api.open-meteo.com/**',r=>r.fulfill({json:{current:{temperature_2m:26,relative_humidity_2m:62,wind_speed_10m:10}},headers:cors}));
   await page.route('**/api/stations?**',r=>r.fulfill({json:{station:{name:'Fixture monitor',pm25:35,pm10:62,distanceKm:3,ageHours:1,time:new Date().toISOString()}}}));
   await page.route('**/api/ask',r=>{const data=r.request().postDataJSON();assert.equal(typeof data.place.lat,'number');return r.fulfill({json:{answer:'Fixture assistant response. Model data is an estimate.',source:'gemini'}});});
@@ -29,7 +29,7 @@ async function stub(page){
     const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block',acceptDownloads:true});
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await stub(page);
     await page.goto(origin+'/');await page.waitForFunction(()=>document.querySelector('#hAqi').textContent==='112');
-    await page.locator('#ticker').scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelector('#ticker').textContent.includes('112'));await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-artifacts/landing-desktop.png',fullPage:true});await accessibility(page,'landing');
+    await page.locator('#ticker').scrollIntoViewIfNeeded();await page.waitForFunction(()=>document.querySelector('#tickNote').textContent.includes('6 of 6'));assert.deepEqual(await page.locator('#ticker .tk b').allTextContents(),['112','61','62','63','64','65']);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-artifacts/landing-desktop.png',fullPage:true});await accessibility(page,'landing');
     await page.goto(origin+'/app.html');await page.waitForFunction(()=>document.querySelector('#hero').textContent.includes('112'));
     if(await page.locator('#onbskip').isVisible())await page.locator('#onbskip').click();
     await page.waitForFunction(()=>document.querySelector('#gs').textContent.includes('Fixture monitor'));
