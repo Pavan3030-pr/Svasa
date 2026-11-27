@@ -67,6 +67,10 @@ async function load(p) {
 }
 
 /* ---------- render ---------- */
+function uiIcon(name){
+ const paths={walk:'<circle cx="13" cy="4" r="2"/><path d="m7 21 3-7 2-4 3 3h4M8 9l4-2 3 3M12 14l4 7"/>',activity:'<path d="M3 12h4l3-8 4 16 3-8h4"/>',mask:'<path d="M4 9c5-3 11-3 16 0v7c-5 4-11 4-16 0zM4 10 1 7m19 3 3-3M8 12h8m-8 3h8"/>',window:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M12 3v18M4 12h16"/>',filter:'<rect x="5" y="3" width="14" height="18" rx="3"/><path d="M8 7h8m-8 4h8m-8 4h8m-5 3h2"/>',person:'<circle cx="12" cy="7" r="3"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/>',info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/>'};
+ return '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true">'+(paths[name]||paths.info)+'</svg>';
+}
 function render() {
   const c = st.data.current, aqi = c.us_aqi, b = S.band(aqi), a = S.advice(aqi, st.profile), dom = S.dominant(c);
   const hrs = S.hourlyFrom(st.data, c.time), win = S.bestWindow(hrs, 2), tr = S.trend(hrs);
@@ -89,15 +93,17 @@ function render() {
     try { if (navigator.share) await navigator.share({ text: t }); else { await navigator.clipboard.writeText(t); $('share').textContent = 'Copied'; setTimeout(() => { const s = $('share'); if (s) s.textContent = 'Share'; }, 1500); } } catch (_) {}
   };
 
-  const rows = st.demo || st.stale ? [['Data unavailable', 'Current recommendations require fresh live data. Values above are for reference only.']] : [['Going out', a.go], ['Exercise', a.exercise], ['Mask', a.mask], ['Windows', a.windows], ['Air purifier', a.purifier], ...S.tips(st.profile, aqi).map(x => ['For you', x])];
-  $('adv').innerHTML = rows.map(r => `<div class="tile"><h3>${esc(r[0])}</h3><p>${esc(r[1])}</p></div>`).join('');
-  $('alert').innerHTML = !st.demo && !st.stale && a.symptoms ? `<div class="alert" role="alert">${esc(a.symptoms)}</div>` : '';
-
-  const keys = ['pm2_5', 'pm10', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 'carbon_monoxide'];
-  $('pol').innerHTML = keys.filter(k => Number.isFinite(c[k])&&c[k]>=0).map(k => {
-    const P = S.POLLUTANTS[k], mean=(!st.demo&&!st.stale&&['pm2_5','pm10','nitrogen_dioxide','sulphur_dioxide','carbon_monoxide'].includes(k))?S.historicalMean(st.data,k,c.time,24):null;
-    return `<div class="pol ${k === dom ? 'dom' : ''}"><b>${P.name}</b><small>${c[k].toFixed(1)} ${P.unit} · model estimate</small><span class="note">${esc(P.note)}${mean?' · 24h model mean '+mean.mean.toFixed(1)+' '+P.unit+'; '+S.whoRatio(k,mean.mean)+'× WHO 24h guideline':''}</span></div>`;
-  }).join('');
+  const fresh=!st.demo&&!st.stale;
+  const rows=fresh?[['Going out',a.go,'walk'],['Exercise',a.exercise,'activity'],['Mask',a.mask,'mask'],['Windows',a.windows,'window'],['Air purifier',a.purifier,'filter'],...S.tips(st.profile,aqi).map(x=>['For you',x,'person'])]:[['Data unavailable','Current recommendations require fresh live data. Values above are for reference only.','info']];
+  $('adv').innerHTML=rows.map((r,i)=>`<article class="actionrow ${i===0?'actionpriority':''}"><span class="actionicon" aria-hidden="true">${uiIcon(r[2])}</span><div><h3>${esc(r[0])}</h3><p>${esc(r[1])}</p></div>${i===0&&fresh?'<span class="actiontag">Priority</span>':''}</article>`).join('');
+  $('alert').innerHTML=fresh&&a.symptoms?`<div class="healthadvisory" role="alert"><span class="advisoryicon" aria-hidden="true">${uiIcon('info')}</span><div><strong>Know when to seek care</strong><p>${esc(a.symptoms)}</p></div></div>`:'';
+  const keys=['pm2_5','pm10','nitrogen_dioxide','ozone','sulphur_dioxide','carbon_monoxide'];
+  if(dom&&keys.includes(dom))keys.sort((x,y)=>Number(y===dom)-Number(x===dom));
+  $('pol').innerHTML=keys.filter(k=>Number.isFinite(c[k])&&c[k]>=0).map(k=>{
+    const P=S.POLLUTANTS[k],mean=fresh&&k!=='ozone'?S.historicalMean(st.data,k,c.time,24):null;
+    const ratio=mean?S.whoRatio(k,mean.mean):null,raw=mean?mean.mean/P.who24:null,primary=k===dom;
+    return `<article class="pollutantrow ${primary?'pollutantprimary':''}"><div class="pollutanttop"><div>${primary?'<span class="dominantlabel">MAIN AQI DRIVER</span>':''}<h3>${P.name}</h3></div><div class="pollutantvalue"><strong>${c[k].toFixed(1)}</strong><small>${P.unit}</small></div></div><p>${esc(P.note)}</p>${mean&&Number.isFinite(raw)?`<div class="guidelinecaption"><span>24h mean ${mean.mean.toFixed(1)} ${P.unit}</span><strong>${ratio.toFixed(1)}× WHO guideline</strong></div><div class="guidelinetrack" role="img" aria-label="${ratio.toFixed(1)} times the WHO 24-hour guideline; bar scale zero to three times"><span class="${raw>1?'above':'below'}" style="width:${Math.min(100,raw/3*100)}%"></span><i aria-hidden="true"></i></div>`:'<small class="pollutantnote">Current model estimate · No comparable 24h guideline shown</small>'}</article>`;
+  }).join('')||'<p class="muted">No modelled pollutant concentrations available.</p>';
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
   renderRail(c,hrs,win);st.hrs = hrs; drawStrip(hrs); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);loadHistory();}
@@ -163,7 +169,8 @@ function drawHistory(c,data) {
 }
 
 function drawStrip(hrs) {
-  $('strip').innerHTML = hrs.slice(0, 12).map(x => `<div class="hr"><span>${esc(x.time.slice(11, 13))}h</span><i style="background:${(S.band(x.aqi)?.color || '#9ca3af')}"></i><b>${S.band(x.aqi) ? Math.round(x.aqi) : '—'}</b></div>`).join('') || '<p class="muted">No hourly data.</p>';
+ const hours=hrs.slice(0,12),max=Math.max(150,...hours.filter(x=>S.band(x.aqi)).map(x=>x.aqi));
+ $('strip').innerHTML=hours.map(x=>{const b=S.band(x.aqi);return `<div class="hr" aria-label="${esc(x.time.slice(11,16))}, US AQI ${b?Math.round(x.aqi):'unavailable'}"><span>${esc(x.time.slice(11,16))}</span><b>${b?Math.round(x.aqi):'—'}</b><div class="hourtrack" aria-hidden="true"><i style="height:${b?Math.max(3,x.aqi/max*100):0}%;background:${b?b.color:'#9ca3af'}"></i></div></div>`;}).join('')||'<p class="muted">No hourly data.</p>';
 }
 function drawDisp() {
   const d = S.dispersion(st.wx, st.ctx.aqi);
