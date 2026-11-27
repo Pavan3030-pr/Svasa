@@ -14,10 +14,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '26'
-      - name: Generate dependency lock evidence
-        run: |
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-          node -e 'console.log("SVASA_LOCK_JSON="+JSON.stringify(require("./package-lock.json")))'
+      - name: Install locked runtime dependencies
+        run: npm ci --omit=dev --ignore-scripts --no-fund
+      - name: Runtime dependency security audit
+        run: npm audit --omit=dev --audit-level=high
       - name: JavaScript syntax
         run: find frontend backend api tests -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Unit and mocked integration tests

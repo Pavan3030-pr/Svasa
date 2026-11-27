@@ -1,7 +1,7 @@
 FROM node:26-slim
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts
 COPY --chown=node:node . .
 ENV PORT=8080
 EXPOSE 8080

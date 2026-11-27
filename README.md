@@ -48,7 +48,7 @@ svasa/
 ```
 
 ## Run locally
-Use the Node version specified in package.json (Node 26.x). Run npm install for the optional Web Push transport.
+Use the Node version specified in package.json (Node 26.x). Run `npm ci` to install the locked runtime dependencies.
 ```bash
 export GEMINI_API_KEY="your_key"     # Windows PowerShell: $env:GEMINI_API_KEY="your_key"
 npm start                            # http://localhost:8080
@@ -128,4 +128,4 @@ During Gemini quota restrictions, the server provides deterministic topic-specif
 
 Release hardening: server-side rule guidance is available on provider HTTP errors, connection failures, missing model configuration or invalid model output, with explicit reason codes and verified evidence. Push enrollment defaults to 60 subscriptions (`PUSH_MAX_SUBSCRIPTIONS`, allowed 20–120) and uses a 12-worker daily dispatch pool. This is bounded fixture-tested capacity, not certified throughput. Public deployed quality audits now run for relevant code changes. Updated PRD and security notes describe actual architecture and limitations.
 
-Frontend reports/feedback and Web Push controls are now isolated in dedicated source modules; `npm run sync:app` generates a single script for the browser and CI checks equivalence. Failed browser storage writes no longer falsely report a saved plan or feedback. The temporary CI lock-evidence step resolves dependency metadata using npm rather than inventing package integrity hashes.
+Frontend reports/feedback and Web Push controls are now isolated in dedicated source modules; `npm run sync:app` generates a single script for the browser and CI checks equivalence. Failed browser storage writes no longer falsely report a saved plan or feedback. The npm-generated lockfile pins the runtime dependency tree and integrity hashes. CI uses `npm ci` and checks for high-severity runtime vulnerabilities.
