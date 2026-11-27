@@ -2,9 +2,10 @@
 const push=require('../lib/push'),g=require('../lib/guard');
 const R=(status,body)=>({status,body});
 module.exports=async function route(req){
- if(req.method==='GET'&&req.query?.dispatch==='1'){
+ if(req.query?.dispatch==='1'){
+  if(req.method!=='GET')return R(405,{error:'GET only'});
   if(!push.authorized(req.headers.authorization))return R(403,{error:'Forbidden'});
-  if(!push.configured())return R(503,{error:'Push not configured'});
+  if(!push.configured())return R(200,{checked:0,sent:0,skipped:'Background push not configured'});
   try{return R(200,await push.dispatch());}catch(_){return R(503,{error:'Dispatch unavailable'});}
  }
  if(req.method==='GET')return R(200,{enabled:push.configured(),publicKey:push.configured()?process.env.VAPID_PUBLIC_KEY:null});

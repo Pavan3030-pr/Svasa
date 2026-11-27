@@ -29,6 +29,7 @@ const server = http.createServer(async (req, res) => {
       const r = await stations({ method: req.method, query: q, headers: req.headers, ip: g.ip(req) });
       return send(res, r.status, r.body);
     }
+    if (url === '/api/push-dispatch') {const r=await require('./routes/push')({method:req.method,headers:req.headers,query:{dispatch:'1'}});return send(res,r.status,r.body,null,{'Cache-Control':'no-store'});}
     if (url === '/api/push') {
       let body=null;if(req.method==='POST'){try{body=JSON.parse(await readBody(req));}catch(e){return send(res,e.code===413?413:400,{error:'Invalid request'});}}
       const r=await require('./routes/push')({method:req.method,headers:req.headers,query:Object.fromEntries(new URL(req.url,'http://x').searchParams),body,ip:g.ip(req)});return send(res,r.status,r.body,null,{'Cache-Control':'no-store'});

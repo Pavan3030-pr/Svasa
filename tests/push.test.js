@@ -7,5 +7,13 @@ assert.deepEqual(push.validate(body).place,{lat:17.46,lon:78.46});assert.equal(p
 delete process.env.CRON_SECRET;assert.equal(push.configured(),false);assert.equal((await route({method:'GET',headers:{},query:{}})).body.enabled,false);
 assert.equal((await route({method:'GET',headers:{},query:{dispatch:'1'}})).status,403);
 process.env.CRON_SECRET='fixture';assert.equal(push.authorized('Bearer fixture'),true);assert.equal(push.authorized('Bearer wrong'),false);
-console.log('Web Push validation and disabled-mode tests passed');
+assert.equal((await route({method:'GET',headers:{authorization:'Bearer fixture'},query:{dispatch:'1'}})).body.skipped,'Background push not configured');
+let record=JSON.stringify({...push.validate(body),last:null}),lock=false,claim=false,sends=0;
+const storage=async cmd=>{const [op,key,...args]=cmd;if(op==='ZREMRANGEBYSCORE')return 0;if(op==='ZRANGE')return ['fixture'];if(op==='GET')return record;if(op==='SET'){if(key.includes('dispatch-lock')){if(lock)return null;lock=true;return 'OK';}if(claim)return null;claim=true;return 'OK';}if(op==='EVAL'){if(args[2]===record){record=args[3];return 'OK';}return null;}throw Error('Unexpected '+op);};
+const transport={setVapidDetails(){},async sendNotification(subscription,payload){assert.equal(subscription.endpoint,valid.endpoint);assert.match(JSON.parse(payload).body,/180/);sends++;}};
+const deps={storage,transport,context:async()=>({aqi:180})};
+let result=await push.dispatch(deps);assert.equal(result.sent,1);assert.equal(sends,1);
+result=await push.dispatch(deps);assert.equal(result.busy,true);assert.equal(sends,1);
+lock=false;claim=false;result=await push.dispatch(deps);assert.equal(result.sent,0);assert.equal(sends,1);
+console.log('Web Push validation, disabled mode, dispatch and deduplication tests passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

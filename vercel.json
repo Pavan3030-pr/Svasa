@@ -41,5 +41,11 @@
   ],
   "framework": null,
   "buildCommand": null,
-  "installCommand": null
+  "installCommand": null,
+  "crons": [
+    {
+      "path": "/api/push-dispatch",
+      "schedule": "0 1 * * *"
+    }
+  ]
 }

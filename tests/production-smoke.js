@@ -15,6 +15,14 @@ async function check(name,fn){try{out.checks[name]=await fn();}catch(e){out.chec
  const post=body=>json('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
  await check('emergency',async()=>{const r=await post({q:'I cannot breathe',ctx:{lang:'en'}});assert.equal(r.status,200);assert.equal(r.data.source,'safety');return {result:'pass'};});
  await check('gemini',async()=>{if(!health?.ai)return {result:'not configured'};const r=await post({q:'What precautions should I consider for outdoor activity?',place:{lat:17.385,lon:78.4867},ctx:{profile:'general',lang:'en',hist:[]}});assert.equal(r.status,200);assert.equal(r.data.source,'gemini');assert.ok(r.data.sections?.recommendation&&r.data.sections?.reason&&r.data.sections?.limitation);assert.ok(Number.isFinite(r.data.evidence?.aqi));return {result:'pass',source:r.data.evidence.source};});
+ await check('multilingual',async()=>{
+  if(!health?.ai)return {result:'not configured'};
+  const cases=[['hi','बाहर टहलने के लिए क्या सावधानी रखूँ?',/[\u0900-\u097f]/],['te','బయట నడవడానికి ఎలాంటి జాగ్రత్తలు తీసుకోవాలి?',/[\u0c00-\u0c7f]/],['ta','வெளியே நடக்க என்ன முன்னெச்சரிக்கை தேவை?',/[\u0b80-\u0bff]/],['bn','বাইরে হাঁটার জন্য কী সতর্কতা নেব?',/[\u0980-\u09ff]/]];
+  const results=[];
+  for(const [lang,q,script] of cases){try{const r=await post({q,place:{lat:17.385,lon:78.4867},ctx:{profile:'general',lang,hist:[]}});const sections=r.data.sections||{};results.push({lang,pass:r.status===200&&r.data.source==='gemini'&&['recommendation','reason','limitation'].every(k=>typeof sections[k]==='string'&&script.test(sections[k]))&&Number.isFinite(r.data.evidence?.aqi)});}catch(_){results.push({lang,pass:false});}}
+  return {result:results.every(x=>x.pass)?'pass':'fail',cases:results,scope:'Script, response schema and evidence only; not clinical or translation-quality assessment'};
+ });
+ await check('schedulerAuthorization',async()=>{const r=await json('/api/push-dispatch');assert.equal(r.status,403);return {result:'pass'};});
  await check('stations',async()=>{if(!health?.stations)return {result:'not configured'};const r=await json('/api/stations?lat=17.385&lon=78.4867');assert.equal(r.status,200);return {result:'pass',stationAvailable:!!r.data.station};});
  await check('pushConfig',async()=>{const r=await json('/api/push');assert.equal(r.status,200);assert.equal(typeof r.data.enabled,'boolean');return {result:'pass',enabled:r.data.enabled};});
  console.log(JSON.stringify(out,null,2));require('node:fs').mkdirSync('production-artifacts',{recursive:true});require('node:fs').writeFileSync('production-artifacts/results.json',JSON.stringify(out,null,2));

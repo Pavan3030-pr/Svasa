@@ -1,0 +1,1 @@
+'use strict';const route=require('../backend/routes/push');module.exports=async(req,res)=>{const r=await route({method:req.method,headers:req.headers,query:{dispatch:'1'}});res.setHeader('Cache-Control','no-store');res.status(r.status).json(r.body);};
