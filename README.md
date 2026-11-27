@@ -18,7 +18,7 @@ Sample data, rendered in a headless browser.
 - Landing page with live readings for six Indian cities
 - Ground check: nearest OpenAQ monitoring station compared with the model (needs `OPENAQ_API_KEY`)
 - Guided breathing exercise (4-4-6) that reads the current air quality
-- Live US AQI with an India NAQI estimate, pollutant breakdown against WHO guidelines
+- Live modelled US AQI and current pollutant concentrations with source limitations
 - Health profiles (asthma, child, older adult, and more) with tailored advice
 - 24-hour forecast, cleanest-window finder, 7-day history
 - Commute and workout planner with a time range
@@ -48,7 +48,7 @@ svasa/
 ```
 
 ## Run locally
-Requires Node 18 or newer. No dependencies to install.
+Use the Node version specified in package.json (Node 26.x). No dependencies to install.
 ```bash
 export GEMINI_API_KEY="your_key"     # Windows PowerShell: $env:GEMINI_API_KEY="your_key"
 npm start                            # http://localhost:8080
@@ -74,12 +74,12 @@ Check `/api/health`: it should return `{"ok":true,"ai":true}`.
 ## API
 - `GET /api/health` returns service, AI and station status.
 - `GET /api/stations?lat=&lon=` returns the nearest OpenAQ station with PM2.5.
-- `POST /api/ask` takes `{ q, ctx }` and returns `{ answer, source }`.
+- `POST /api/ask` takes `{ q, place:{lat,lon}, ctx:{profile,lang,hist} }` and returns `{ answer, source, evidence }` for grounded AI responses.
 
 ## Data and limits
 Air data comes from Open-Meteo (CAMS model estimates), not ground monitors. Guidance is general and not medical advice. See `docs/SECURITY.md` for security notes.
 
-## SVASA 4 upgrade branch
+## SVASA 4
 The Smart Day Planner minimizes caution windows first and outdoor PM2.5 concentration-time proxy second, using up to four ordered activities with fixed or flexible timing. This proxy is not an inhaled dose or a predicted health outcome. Family profiles stay in browser storage. India NAQI display and direct current-to-WHO comparisons are withheld pending scientifically valid coverage and averaging. Alerts are in-app only.
 
 The assistant now accepts `{q,place:{lat,lon},ctx:{profile,lang,hist}}` and fetches its own model context in UTC. The evidence object identifies the provider and observation time; this is not independently measured ground truth. Reports save explicitly selected forecast-based schedules locally for seven-day review and JSON export. Station data has sensor-specific timestamps and is compared only when recent. No true background push or official India NAQI is claimed.

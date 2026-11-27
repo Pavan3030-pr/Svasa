@@ -1,0 +1,30 @@
+name: SVASA checks
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: JavaScript syntax
+        run: find frontend backend api tests -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Unit and mocked integration tests
+        run: npm test
+      - name: Local HTTP smoke check
+        run: |
+          node backend/server.js > /tmp/svasa.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" || true' EXIT
+          curl --retry 10 --retry-connrefused --retry-delay 1 -fsS http://localhost:8080/api/health
+          curl -fsS http://localhost:8080/ > /tmp/landing.html
+          curl -fsS http://localhost:8080/app.html > /tmp/app.html
+          grep -q 'Svasa' /tmp/landing.html
+          grep -q 'optimizeday' /tmp/app.html

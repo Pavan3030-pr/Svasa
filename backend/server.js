@@ -20,7 +20,7 @@ function readBody(req) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = req.url.split('?')[0];
-    res.on('finish', () => { if (res.statusCode >= 400) console.log(JSON.stringify({ t: new Date().toISOString(), ip: g.ip(req), m: req.method, u: url, s: res.statusCode })); });
+    res.on('finish', () => { if (res.statusCode >= 400) console.log(JSON.stringify({ t: new Date().toISOString(), m: req.method, u: url, s: res.statusCode })); });
     if (url === '/api/health' && req.method === 'GET') { const r = health(); return send(res, r.status, r.body); }
     if (url === '/api/stations') {
       const q = Object.fromEntries(new URL(req.url, 'http://x').searchParams);

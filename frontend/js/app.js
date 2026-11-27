@@ -40,6 +40,7 @@ async function load(p) {
     const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5&forecast_days=2&past_days=7&timezone=auto`);
     if (seq !== loadSequence) return;
     if (!d.current || !S.band(d.current.us_aqi)) throw new Error('No data for this location yet');
+    const age=S.readingAge(d);if(age===null||age>3||age< -1)throw new Error('Provider reading is stale or has no valid timestamp');
     st.data = d; st.demo = false; st.stale = null; store.set('svasa_snap_' + p.name, { at: Date.now(), data: d });
   } catch (e) {
     if (seq !== loadSequence) return;
@@ -169,9 +170,11 @@ function drawStation(s) {
 }
 
 /* ---------- cities ---------- */
+let comparisonSequence=0;
 async function drawCities() {
-  const out = [];
-  for (const p of cmp) { try { const r = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=us_aqi,pm2_5`); out.push({ name: p.name, aqi: r.current.us_aqi, pm: r.current.pm2_5, p }); } catch (_) {} }
+  const seq=++comparisonSequence, places=cmp.slice();
+  const out=await Promise.all(places.map(async p=>{try{const r=await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=us_aqi,pm2_5`);return {name:p.name,aqi:r.current.us_aqi,pm:r.current.pm2_5,p};}catch(_){return null;}}));
+  if(seq!==comparisonSequence)return;
   const rk = S.rank(out);
   $('cmp').innerHTML = rk.length ? rk.map((x, i) => { const b = S.band(x.aqi);
     return `<div class="cmprow"><button type="button" class="btn ghost" data-go="${i}">${esc(x.name)}</button><div class="bar" role="img" aria-label="AQI ${Math.round(x.aqi)}"><i style="width:${Math.min(100, x.aqi / 3)}%;background:${b.color}"></i></div><b style="color:${b.ink}">${Math.round(x.aqi)}</b><small>${esc(b.label)}${typeof x.pm === 'number' ? ' · PM2.5 ' + x.pm.toFixed(0) : ''}</small><button type="button" class="btn ghost" data-rm="${i}" aria-label="Remove ${esc(x.name)}">✕</button></div>`; }).join('')
@@ -228,14 +231,13 @@ function pushMsg(role, text, cls) {
   const m = document.createElement('div'); m.className = 'msg ' + role + (cls ? ' ' + cls : ''); m.textContent = text;
   $('log').appendChild(m); $('log').scrollTop = $('log').scrollHeight; return m;
 }
-const pay = () => ({ aqi: st.ctx.aqi, city: st.ctx.city, profile: st.ctx.profile, dominant: st.ctx.dominant, trend: st.ctx.trend, window: st.ctx.window, wx: st.ctx.wx, lang: st.lang, hist: st.hist });
 async function viaServer(q) {
   const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q, place:{lat:st.place.lat,lon:st.place.lon},ctx:{profile:st.profile,lang:st.lang,hist:st.hist} }) });
   if (!r.ok) throw new Error('server ' + r.status);
   return await r.json();
 }
 async function ask(q, en) {
-  q = S.cleanQuery(q); if (!q || busy) return;
+  q = S.cleanQuestion(q); if (!q || busy) return;
   pushMsg('u', q);
   const sf = S.safety(q, st.lang); if (sf) { pushMsg('a', sf, 'urgent'); return; }
   if (!st.ctx || st.demo || st.stale) { pushMsg('a', 'Search a city first and I will answer from its live air data.'); return; }
@@ -334,7 +336,7 @@ $('af').onsubmit = e => { e.preventDefault(); const v = $('aq').value; $('aq').v
 pushMsg('a', 'Hi, I am Svasa. Ask me about the air in your city, when to go out, or whether you need a mask.');
 fetch('/api/health').then(r => r.json()).then(j => { st.serverAI = !!j.ai; $('aimode').textContent = j.ai ? 'Gemini on' : 'Rule-based answers'; }).catch(() => { $('aimode').textContent = 'Rule-based answers'; });
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
-setInterval(() => { if (st.place && !document.hidden) load(st.place); }, 5 * 60 * 1000);
+setInterval(() => { if (st.place && !document.hidden && !busy) load(st.place); }, 5 * 60 * 1000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 
 $('onbchips').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<button type="button" class="chip" data-k="${k}">${esc(v.name)}</button>`).join('');

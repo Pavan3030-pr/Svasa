@@ -11,8 +11,8 @@ module.exports = async function ask(req) {
   const b = req.body;
   if (g.tooBig(b)) return R(413, { error: 'Request too large' });
   if (!b || typeof b !== 'object') return R(400, { error: 'Invalid JSON' });
-  const q = S.cleanQuery(b.q);
-  const sf = S.safety(b.q, b.ctx && b.ctx.lang); if (sf) return R(200, { answer: sf, source: 'safety' });
+  const q = S.cleanQuestion(b.q);
+  const sf = S.safety(typeof b.q==='string'?b.q:'', b.ctx && b.ctx.lang); if (sf) return R(200, { answer: sf, source: 'safety' });
   if (!q || !air.coordinates(b.place)) return R(400, {error:'Question and valid coordinates required'});
   if (inflight >= 20) return R(503, { error: 'Busy, try again' });
   inflight++;

@@ -32,7 +32,7 @@
   }
   function bandIndex(aqi) { const b = band(aqi); return b ? BANDS.indexOf(b) : -1; }
   function effectiveLevel(aqi, profile) {
-    const p = PROFILES[profile] || PROFILES.general;
+    const p = Object.hasOwn(PROFILES,profile) ? PROFILES[profile] : PROFILES.general;
     const i = bandIndex(aqi); if (i < 0) return -1;
     return Math.min(BANDS.length - 1, Math.round(i + p.shift));
   }
@@ -43,7 +43,7 @@
     return best;
   }
   function whoRatio(key, value) {
-    const p = POLLUTANTS[key]; if (!p || typeof value !== 'number') return null;
+    const p = Object.hasOwn(POLLUTANTS,key)?POLLUTANTS[key]:null; if (!p || !Number.isFinite(value)||value<0) return null;
     return Math.round((value / p.who24) * 10) / 10;
   }
   function mask(aqi, profile) {
@@ -94,6 +94,12 @@
     }
     return out;
   }
+  function readingAge(data, now=Date.now()) {
+    if(!data||!data.current||typeof data.current.time!=='string'||!Number.isFinite(data.utc_offset_seconds))return null;
+    const t=Date.parse(data.current.time+'Z')-data.utc_offset_seconds*1000;
+    return Number.isFinite(t)?(now-t)/3600000:null;
+  }
+  function cleanQuestion(q) {return typeof q==='string'?q.replace(/[\u0000-\u001F\u007F]/g,' ').trim().slice(0,500):'';}
   function cleanQuery(q) {
     return String(q == null ? '' : q).replace(/[<>"'`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
   }
@@ -172,11 +178,11 @@
     const num=x=>typeof x==='number'&&isFinite(x)?Math.round(x):null;
     const str=x=>cleanQuery(x).slice(0,16);
     let w=null;
-    if(c.window&&typeof c.window==='object')w={start:str(c.window.start).padEnd(16,' ').slice(0,16),end:str(c.window.end).padEnd(16,' ').slice(0,16),avg:num(c.window.avg)||0};
+    if(c.window&&typeof c.window==='object'&&typeof c.window.start==='string'&&typeof c.window.end==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(c.window.start)&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(c.window.end)&&c.window.end>c.window.start&&band(c.window.avg))w={start:c.window.start,end:c.window.end,avg:Math.round(c.window.avg)};
     const wx=c.wx&&typeof c.wx==='object'?{t:num(c.wx.t),h:num(c.wx.h),w:num(c.wx.w)}:null;
-    return {aqi:c.aqi,city:cleanQuery(c.city).slice(0,60)||'your city',profile:PROFILES[c.profile]?c.profile:'general',
-      dominant:POLLUTANTS[c.dominant]?c.dominant:null,trend:['rising','falling','steady'].includes(c.trend)?c.trend:'steady',
-      window:w,wx,hist:Array.isArray(c.hist)?c.hist.slice(-4).filter(x=>x&&(x.r==='u'||x.r==='a')).map(x=>({r:x.r,t:cleanQuery(x.t).slice(0,120)})):[],lang:LANGS[c.lang]?c.lang:'en'};
+    return {aqi:c.aqi,city:cleanQuery(c.city).slice(0,60)||'your city',profile:Object.hasOwn(PROFILES,c.profile)?c.profile:'general',
+      dominant:Object.hasOwn(POLLUTANTS,c.dominant)?c.dominant:null,trend:['rising','falling','steady'].includes(c.trend)?c.trend:'steady',
+      window:w,wx,hist:Array.isArray(c.hist)?c.hist.slice(-4).filter(x=>x&&(x.r==='u'||x.r==='a')).map(x=>({r:x.r,t:cleanQuery(x.t).slice(0,120)})):[],lang:Object.hasOwn(LANGS,c.lang)?c.lang:'en'};
   }
   function planTrip(hrs,len,from,to){
     from=Number.isInteger(from)?from:0;to=Number.isInteger(to)?to:24;
@@ -291,6 +297,6 @@
     return {...result,baseline,changePct:baseline>0?Math.round((baseline-result.exposure)/baseline*100):null};
   }
 
-  const api = { optimizeDay, pm25ToAqi, dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
+  const api = { readingAge, cleanQuestion, optimizeDay, pm25ToAqi, dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Svasa = api;
 })(typeof window !== 'undefined' ? window : globalThis);
