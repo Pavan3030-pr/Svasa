@@ -44,7 +44,7 @@ async function stub(page){
     await page.locator('[data-view="ask"]').click();await page.locator('#aq').fill('Can I go outside?');await page.locator('#af button').click();await page.getByText('Fixture assistant response. Model data is an estimate.',{exact:true}).waitFor();
     await page.locator('#aq').fill('I cannot breathe');await page.locator('#af button').click();await page.locator('.msg.urgent').waitFor();
     await page.screenshot({path:'test-artifacts/assistant-desktop.png',fullPage:true});
-    await page.setViewportSize({width:390,height:844});await page.locator('[data-view="today"]').click();await page.screenshot({path:'test-artifacts/dashboard-mobile.png',fullPage:true});
+    await page.setViewportSize({width:390,height:844});await page.locator('[data-view="today"]').click();await page.screenshot({path:'test-artifacts/dashboard-mobile.png',fullPage:true});await accessibility(page,'dashboard-mobile');
     await page.locator('[data-view="plan"]').click();assert.equal(await page.locator('#optimizeday').isVisible(),true);await page.screenshot({path:'test-artifacts/planner-mobile.png',fullPage:true});await accessibility(page,'planner-mobile');
     await page.locator('[data-view="reports"]').click();assert.equal(await page.locator('#reportsummary').isVisible(),true);
     assert.deepEqual(errors,[],'Uncaught browser errors');await context.close();

@@ -35,6 +35,21 @@ async function check(name,fn){try{out.checks[name]=await fn();}catch(e){out.chec
   if(usable&&!live)console.log('::warning::Gemini unavailable; fallback was verified, live model evaluation remains incomplete.');
   return {result:!usable?'fail':strictLive&&!live?'quota limited':'pass',providerEvaluation:live?'live verified':'incomplete due to provider availability or response validation',cases:results,scope:'Response schema, script, source and evidence; not clinical or translation-quality assessment'};
  });
+ await check('productionSecurityHeaders',async()=>{
+  for(const path of ['/','/app.html']){
+   const r=await get(path),csp=r.headers.get('content-security-policy')||'';
+   assert.equal(r.status,200);assert.match(csp,/script-src 'self';/);assert.match(csp,/frame-ancestors 'none'/);assert.match(csp,/object-src 'none'/);assert.equal(r.headers.get('x-frame-options'),'DENY');assert.equal(r.headers.get('x-content-type-options'),'nosniff');assert.match(r.headers.get('strict-transport-security')||'',/max-age=63072000/);assert.equal(r.headers.get('referrer-policy'),'no-referrer');
+  }return {result:'pass',scope:'Deployed landing and application response headers'};
+ });
+ await check('productionAccessBoundaries',async()=>{
+  const cases=[];
+  for(const path of ['/.env','/backend/lib/gemini.js','/package-lock.json']){const r=await get(path);assert.equal(r.status,404,path);cases.push({path,status:r.status});}
+  const method=await get('/api/ask');assert.equal(method.status,405);
+  const invalidOrigin=await get('/api/ask',{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://invalid.example'},body:'{}'});assert.equal(invalidOrigin.status,403);
+  const wrongType=await get('/api/ask',{method:'POST',headers:{'Content-Type':'text/plain'},body:'{}'});assert.equal(wrongType.status,415);
+  const invalidCoordinates=await get('/api/stations?lat=91&lon=0');assert.equal(invalidCoordinates.status,400);
+  return {result:'pass',cases,method:method.status,origin:invalidOrigin.status,mediaType:wrongType.status,coordinates:invalidCoordinates.status,scope:'Bounded negative checks; no provider or notification dispatch calls, not a penetration test'};
+ });
  await check('schedulerAuthorization',async()=>{const r=await json('/api/push-dispatch');assert.equal(r.status,403);return {result:'pass'};});
  await check('stations',async()=>{if(!health?.stations)return {result:'not configured'};const r=await json('/api/stations?lat=17.385&lon=78.4867');assert.equal(r.status,200);const station=r.data.station;if(station){assert.ok(Number.isFinite(station.pm25)&&station.pm25>=0);assert.ok(Number.isFinite(Date.parse(station.time)));}return {result:'pass',stationAvailable:!!station,readingValid:station?true:null};});
  await check('pushConfig',async()=>{const r=await json('/api/push');assert.equal(r.status,200);assert.equal(typeof r.data.enabled,'boolean');if(health?.distributedRateLimit){assert.equal(r.data.enabled,true,'Push disabled despite Redis configuration; check VAPID pair and subject');assert.match(r.data.publicKey,/^[A-Za-z0-9_-]{87}$/);}return {result:'pass',enabled:r.data.enabled};});

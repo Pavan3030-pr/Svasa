@@ -34,7 +34,8 @@
 /* Optional background alerts; no tracking or permission prompt before user action. */
 (function(root){'use strict';root.SvasaPushUI={init({$,store,st}){
 /* Optional opt-in Web Push. No background location tracking. */
-let pushConfig=null;
+let pushConfig=null,pushInitSequence=0;
+function validSavedSubscription(x){return x&&typeof x.endpoint==='string'&&x.endpoint.length<=1024&&typeof x.token==='string'&&/^[a-f0-9]{64}$/.test(x.token)&&typeof x.city==='string'&&[101,151,201].includes(x.threshold)?x:null;}
 const pushStatus=s=>{$('pushstatus').textContent=s;};
 const receiptKey='svasa_push_receipt';
 function currentReceipt(){const r=store.get(receiptKey,null);if(!r||r.method!=='user-confirmed'||typeof r.confirmedAt!=='string'||!Number.isFinite(Date.parse(r.confirmedAt))||Date.parse(r.confirmedAt)>Date.now()+60000)return null;return {confirmedAt:r.confirmedAt,method:'user-confirmed'};}
@@ -44,13 +45,16 @@ $('clearreceipt').onclick=()=>{if(store.set(receiptKey,null))renderReceipt();els
 renderReceipt();
 async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
 async function initPush(){
+ const seq=++pushInitSequence;
  if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window)){pushStatus('Background push is unavailable in this browser.');return;}
  try{
   const r=await fetch('/api/push',{signal:AbortSignal.timeout(5000)});if(!r.ok){pushStatus('Background alert settings unavailable. Try reopening settings.');return;}pushConfig=await r.json();
-  const existing=store.get('svasa_push',null);
-  $('pushoff').hidden=!existing;$('pushtest').hidden=!existing||!pushConfig.enabled;
+  const existing=validSavedSubscription(store.get('svasa_push',null));
+  const reg=await navigator.serviceWorker.getRegistration(),sub=reg?await reg.pushManager.getSubscription():null;if(seq!==pushInitSequence)return;
+  const matches=!!existing&&sub?.endpoint===existing.endpoint&&Notification.permission==='granted';
+  $('pushoff').hidden=!existing;$('pushtest').hidden=!matches||!pushConfig.enabled;
   $('pushon').hidden=!pushConfig.enabled;$('pushthreshold').hidden=!pushConfig.enabled;
-  if(existing)pushStatus('Saved subscription for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or disable it here.');
+  if(existing){$('pushlevel').value=String(existing.threshold);pushStatus(matches?'Browser subscription found for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or send a test to check delivery.':'Saved subscription no longer matches this browser or permission. Renew or disable it.');}
  }catch(_){pushStatus('Background alert settings unavailable. Try reopening settings.');}
 }
 $('pushon').onclick=async()=>{
@@ -60,7 +64,7 @@ $('pushon').onclick=async()=>{
   if(await Notification.requestPermission()!=='granted')throw Error('Notification permission not granted');
   const reg=await navigator.serviceWorker.ready;
   let sub=await reg.pushManager.getSubscription();
-  const old=store.get('svasa_push',null);
+  const old=validSavedSubscription(store.get('svasa_push',null));
   if(sub&&!old){await sub.unsubscribe();sub=null;}
   const k=pushConfig.publicKey.replace(/-/g,'+').replace(/_/g,'/'),bytes=Uint8Array.from(atob(k+'='.repeat((4-k.length%4)%4)),c=>c.charCodeAt(0));
   if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
@@ -74,10 +78,10 @@ $('pushon').onclick=async()=>{
  }catch(e){pushStatus(e.message+'; you can retry or disable the subscription.');}finally{btn.disabled=false;}
 };
 $('pushoff').onclick=async()=>{
- const old=store.get('svasa_push',null);if(!old)return;
- try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;$('pushtest').hidden=true;$('pushreceived').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
+ const old=validSavedSubscription(store.get('svasa_push',null));if(!old)return;
+ try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub&&sub.endpoint===old.endpoint)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});if(!store.set('svasa_push',null))throw Error('Local record not cleared');$('pushoff').hidden=true;$('pushtest').hidden=true;$('pushreceived').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
 };
-$('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});$('pushreceived').hidden=false;pushStatus('Test accepted by the push service. Check your device notifications, then confirm receipt only if you actually saw it.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
+$('pushtest').onclick=async()=>{const old=validSavedSubscription(store.get('svasa_push',null));if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});$('pushreceived').hidden=false;pushStatus('Test accepted by the push service. Check your device notifications, then confirm receipt only if you actually saw it.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
 $('pushreceived').onclick=()=>{if(!store.set(receiptKey,{confirmedAt:new Date().toISOString(),method:'user-confirmed'})){pushStatus('Could not save your confirmation on this device.');return;}$('pushreceived').hidden=true;renderReceipt();pushStatus('Receipt confirmed by you on this device.');};
 if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-test-shown'){ $('pushreceived').hidden=false;pushStatus('The browser displayed a test notification. Confirm only if you saw it.');}});
 root.addEventListener('svasa-alert-settings',initPush);

@@ -399,7 +399,8 @@ $('clearfeedback').onclick=()=>{if(!store.set('svasa_feedback',[])){$('feedbacks
 /* Optional background alerts; no tracking or permission prompt before user action. */
 (function(root){'use strict';root.SvasaPushUI={init({$,store,st}){
 /* Optional opt-in Web Push. No background location tracking. */
-let pushConfig=null;
+let pushConfig=null,pushInitSequence=0;
+function validSavedSubscription(x){return x&&typeof x.endpoint==='string'&&x.endpoint.length<=1024&&typeof x.token==='string'&&/^[a-f0-9]{64}$/.test(x.token)&&typeof x.city==='string'&&[101,151,201].includes(x.threshold)?x:null;}
 const pushStatus=s=>{$('pushstatus').textContent=s;};
 const receiptKey='svasa_push_receipt';
 function currentReceipt(){const r=store.get(receiptKey,null);if(!r||r.method!=='user-confirmed'||typeof r.confirmedAt!=='string'||!Number.isFinite(Date.parse(r.confirmedAt))||Date.parse(r.confirmedAt)>Date.now()+60000)return null;return {confirmedAt:r.confirmedAt,method:'user-confirmed'};}
@@ -409,13 +410,16 @@ $('clearreceipt').onclick=()=>{if(store.set(receiptKey,null))renderReceipt();els
 renderReceipt();
 async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
 async function initPush(){
+ const seq=++pushInitSequence;
  if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window)){pushStatus('Background push is unavailable in this browser.');return;}
  try{
   const r=await fetch('/api/push',{signal:AbortSignal.timeout(5000)});if(!r.ok){pushStatus('Background alert settings unavailable. Try reopening settings.');return;}pushConfig=await r.json();
-  const existing=store.get('svasa_push',null);
-  $('pushoff').hidden=!existing;$('pushtest').hidden=!existing||!pushConfig.enabled;
+  const existing=validSavedSubscription(store.get('svasa_push',null));
+  const reg=await navigator.serviceWorker.getRegistration(),sub=reg?await reg.pushManager.getSubscription():null;if(seq!==pushInitSequence)return;
+  const matches=!!existing&&sub?.endpoint===existing.endpoint&&Notification.permission==='granted';
+  $('pushoff').hidden=!existing;$('pushtest').hidden=!matches||!pushConfig.enabled;
   $('pushon').hidden=!pushConfig.enabled;$('pushthreshold').hidden=!pushConfig.enabled;
-  if(existing)pushStatus('Saved subscription for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or disable it here.');
+  if(existing){$('pushlevel').value=String(existing.threshold);pushStatus(matches?'Browser subscription found for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or send a test to check delivery.':'Saved subscription no longer matches this browser or permission. Renew or disable it.');}
  }catch(_){pushStatus('Background alert settings unavailable. Try reopening settings.');}
 }
 $('pushon').onclick=async()=>{
@@ -425,7 +429,7 @@ $('pushon').onclick=async()=>{
   if(await Notification.requestPermission()!=='granted')throw Error('Notification permission not granted');
   const reg=await navigator.serviceWorker.ready;
   let sub=await reg.pushManager.getSubscription();
-  const old=store.get('svasa_push',null);
+  const old=validSavedSubscription(store.get('svasa_push',null));
   if(sub&&!old){await sub.unsubscribe();sub=null;}
   const k=pushConfig.publicKey.replace(/-/g,'+').replace(/_/g,'/'),bytes=Uint8Array.from(atob(k+'='.repeat((4-k.length%4)%4)),c=>c.charCodeAt(0));
   if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
@@ -439,10 +443,10 @@ $('pushon').onclick=async()=>{
  }catch(e){pushStatus(e.message+'; you can retry or disable the subscription.');}finally{btn.disabled=false;}
 };
 $('pushoff').onclick=async()=>{
- const old=store.get('svasa_push',null);if(!old)return;
- try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;$('pushtest').hidden=true;$('pushreceived').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
+ const old=validSavedSubscription(store.get('svasa_push',null));if(!old)return;
+ try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub&&sub.endpoint===old.endpoint)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});if(!store.set('svasa_push',null))throw Error('Local record not cleared');$('pushoff').hidden=true;$('pushtest').hidden=true;$('pushreceived').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
 };
-$('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});$('pushreceived').hidden=false;pushStatus('Test accepted by the push service. Check your device notifications, then confirm receipt only if you actually saw it.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
+$('pushtest').onclick=async()=>{const old=validSavedSubscription(store.get('svasa_push',null));if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});$('pushreceived').hidden=false;pushStatus('Test accepted by the push service. Check your device notifications, then confirm receipt only if you actually saw it.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
 $('pushreceived').onclick=()=>{if(!store.set(receiptKey,{confirmedAt:new Date().toISOString(),method:'user-confirmed'})){pushStatus('Could not save your confirmation on this device.');return;}$('pushreceived').hidden=true;renderReceipt();pushStatus('Receipt confirmed by you on this device.');};
 if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-test-shown'){ $('pushreceived').hidden=false;pushStatus('The browser displayed a test notification. Confirm only if you saw it.');}});
 root.addEventListener('svasa-alert-settings',initPush);
@@ -749,7 +753,7 @@ async function ask(q, en) {
   if (location.protocol.startsWith('http')) { try { result = await viaServer(q); } catch (_) {} }
   if(requestSeq!==loadSequence||requestProfile!==st.profile||requestLang!==st.lang){t.textContent='Context changed. Please ask again.';t.classList.remove('typing');busy=false;return;}
   const a=result&&result.answer; const text=a||('Local rule-based fallback (English; model data): '+fb);
-  t.textContent=text; if(result&&result.sections&&result.evidence){t.textContent='';for(const [label,key] of [['Recommendation','recommendation'],['Why','reason'],['Limitations','limitation']]){const row=document.createElement('div'),heading=document.createElement('strong'),body=document.createElement('p');heading.textContent=label;body.textContent=result.sections[key];row.append(heading,body);t.append(row);}const evidence=document.createElement('small');evidence.textContent='Open-Meteo / CAMS · US AQI '+Math.round(result.evidence.aqi)+' · '+result.evidence.observedAt+' (UTC)';t.append(evidence);} t.classList.remove('typing'); t.dataset.source=result&&result.source||'local';if(result?.source==='rules')$('aimode').textContent=result.reason==='provider_rate_limit'?'Rule-based · provider busy':'Rule-based · AI unavailable';else if(result?.source==='gemini')$('aimode').textContent='Gemini response'; $('log').scrollTop = $('log').scrollHeight;
+  t.textContent=text; if(result&&result.sections&&result.evidence){t.textContent='';for(const [label,key] of [['Recommendation','recommendation'],['Why','reason'],['Limitations','limitation']]){const row=document.createElement('div'),heading=document.createElement('strong'),body=document.createElement('p');heading.textContent=label;body.textContent=result.sections[key];row.append(heading,body);t.append(row);}const evidence=document.createElement('small');evidence.textContent='Open-Meteo / CAMS · US AQI '+Math.round(result.evidence.aqi)+' · '+result.evidence.observedAt+' (UTC)';t.append(evidence);} t.classList.remove('typing'); t.dataset.source=result&&result.source||'local';if(result?.source==='rules')$('aimode').textContent=result.reason==='provider_rate_limit'?'Rule-based · provider busy':'Rule-based · AI unavailable';else if(result?.source==='gemini')$('aimode').textContent='Gemini response';else if(!result)$('aimode').textContent='Local rule-based · server unavailable';else if(result.source==='offtopic')$('aimode').textContent='Outside assistant scope'; $('log').scrollTop = $('log').scrollHeight;
   st.hist=st.hist.concat([{r:'u',t:q},{r:'a',t:text}]).slice(-8);busy=false;
 }
 
@@ -812,7 +816,8 @@ $('nav').addEventListener('click', e => { const b = e.target.closest('button[dat
 $('profile').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<option value="${k}">${esc(v.name)}</option>`).join('');
 $('refreshair').onclick=()=>{if(st.place&&!$('refreshair').disabled)load(st.place);};
 const savedThreshold=store.get('svasa_alert_threshold',2);$('thr').value=[1,2,3].includes(savedThreshold)?String(savedThreshold):'2';$('thr').onchange=()=>store.set('svasa_alert_threshold',Number($('thr').value));
-$('profile').onchange = e => { st.profile = e.target.value; if(st.place)store.set('svasa_last',{p:st.place,profile:st.profile});if (st.data) render(); };
+function changeProfile(profile){if(!Object.hasOwn(S.PROFILES,profile)||profile===st.profile)return;st.profile=profile;st.hist=[];$('profile').value=profile;if(st.place)store.set('svasa_last',{p:st.place,profile});if(st.data)render();}
+$('profile').onchange = e => changeProfile(e.target.value);
 $('q').addEventListener('input', e => { $('sugg').hidden = true; clearTimeout(suggTimer); suggTimer = setTimeout(() => suggest(e.target.value), 250); });
 $('q').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { const b = $('sugg').querySelector('button'); if (b) { e.preventDefault(); b.focus(); } } if (e.key === 'Escape') $('sugg').hidden = true; });
 $('sugg').addEventListener('keydown', e => { const b = e.target.closest('button'); if (!b) return; if (e.key === 'ArrowDown' && b.nextElementSibling) { e.preventDefault(); b.nextElementSibling.focus(); } if (e.key === 'ArrowUp') { e.preventDefault(); (b.previousElementSibling || $('q')).focus(); } if (e.key === 'Escape') { $('sugg').hidden = true; $('q').focus(); } });
@@ -846,7 +851,7 @@ $('notif').onclick = async () => {
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('inst').hidden = false; });
 $('inst').onclick = async () => { if (deferredInstall) { const prompt=deferredInstall;deferredInstall=null;$('inst').hidden=true;try{await prompt.prompt();await prompt.userChoice;}catch(_){} } };addEventListener('appinstalled',()=>{deferredInstall=null;$('inst').hidden=true;});
 $('lang').innerHTML = Object.entries(S.LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
-$('lang').onchange = e => { st.lang = e.target.value; setAskLang(st.lang); };
+$('lang').onchange = e => { if(st.lang!==e.target.value)st.hist=[];st.lang = e.target.value; setAskLang(st.lang); };
 setAskLang('en');
 $('qs').onclick = e => { const b = e.target.closest('button'); if (b) ask(b.textContent, b.dataset.en); };
 $('af').onsubmit = e => { e.preventDefault(); const v = $('aq').value; $('aq').value = ''; ask(v); };
@@ -858,7 +863,7 @@ setInterval(() => { if (st.place && !document.hidden && !busy&&!$('refreshair').
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {const register=()=>navigator.serviceWorker.register('sw.js').catch(()=>{});window.addEventListener('load',()=>{if('requestIdleCallback'in window)requestIdleCallback(register,{timeout:2500});else setTimeout(register,100);},{once:true});}
 
 $('onbchips').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<button type="button" class="chip" data-k="${k}">${esc(v.name)}</button>`).join('');
-$('onbchips').onclick = e => { const b = e.target.closest('button'); if (!b) return; st.profile = b.dataset.k; $('profile').value = st.profile; store.set('svasa_onb', 1); $('onb').hidden = true; if (st.data) render(); };
+$('onbchips').onclick = e => { const b = e.target.closest('button'); if (!b) return; changeProfile(b.dataset.k);store.set('svasa_onb', 1); $('onb').hidden = true; };
 $('onbskip').onclick = () => { store.set('svasa_onb', 1); $('onb').hidden = true; };
 $('onb').hidden = !!store.get('svasa_onb', 0);
 
@@ -900,7 +905,7 @@ function renderFamily(){
 }
 $('familyprofile').innerHTML=Object.entries(S.PROFILES).map(([k,v])=>'<option value="'+k+'">'+esc(v.name)+'</option>').join('');
 $('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value.trim(),profile=$('familyprofile').value;if(!name||family.length>=6||!Object.hasOwn(S.PROFILES,profile)){banner('Add a nickname; up to six profiles are supported.');return;}const next=[...family,{name,profile}];if(!store.set('svasa_family',next)){banner('Could not save family profile on this device.');return;}family=next;$('familyname').value='';renderFamily();inbox?.emit('Family profile added','Your family guidance is ready on this device.','family');};
-$('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){family.splice(Number(b.dataset.familyRemove),1);store.set('svasa_family',family);renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;st.profile=x.profile;$('profile').value=x.profile;if(st.data)render();show('today');}};
+$('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){family.splice(Number(b.dataset.familyRemove),1);store.set('svasa_family',family);renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;changeProfile(x.profile);show('today');}};
 $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderFamily();};
 // Populate non-visible feature views only when opened.
 
