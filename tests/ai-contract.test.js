@@ -37,4 +37,9 @@ for(const [lang,good,unsafe,wrong] of [
  check(validateResponse(JSON.stringify({...valid,reason:good+' 19:00'}),ctx)===null);
  check(validateResponse(JSON.stringify({...valid,reason:good+' PM2.5 500 µg/m³'}),ctx)===null);
 }
+const accurate={aqi:160,pm25:50,profile:'general',lang:'en',window:{avg:80,start:'2026-11-27T10:00',end:'2026-11-27T12:00'}};
+for(const reason of ['Current AQI 80','AQI 160.5','999 AQI','PM2.5 is 500','PM2.5: 49'])check(validateResponse(JSON.stringify({...base,reason}),accurate)===null);
+for(const reason of ['Current AQI 160','AQI 80','PM2.5 is 50'])check(validateResponse(JSON.stringify({...base,reason}),accurate)!==null);
+for(const [lang,label,txt] of [['hi','वायु गुणवत्ता सूचकांक','सावधानी रखें।'],['te','గాలి నాణ్యత సూచిక','జాగ్రత్తలు తీసుకోండి.'],['ta','காற்றுத் தரக் குறியீடு','கவனமாக இருங்கள்.'],['bn','বায়ুর মান সূচক','সতর্ক থাকুন।']])check(validateResponse(JSON.stringify({kind:'air',recommendation:txt,reason:label+' 999',limitation:txt}),{...accurate,lang})===null);
+check(validateResponse(JSON.stringify({kind:'offtopic',recommendation:'hidden text',reason:'',limitation:''}),accurate)===null);
 console.log(cases+' deterministic AI contract and multilingual safety cases passed (not live model evaluations)');

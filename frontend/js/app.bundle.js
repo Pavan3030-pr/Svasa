@@ -407,9 +407,16 @@ function verifyText(value,ctx,S){
  const t=digits([value.recommendation,value.reason,value.limitation].join('\n')),recommendation=digits(value.recommendation||'');
  if(/(?:पूरी तरह सुरक्षित|बिल्कुल सुरक्षित|कोई जोखिम नहीं|పూర్తిగా సురక్షితం|ఎలాంటి ప్రమాదం లేదు|முற்றிலும் பாதுகாப்பானது|எந்த ஆபத்தும் இல்லை|সম্পূর্ণ নিরাপদ|কোনো ঝুঁকি নেই)/u.test(t))return false;
  const allowedAQI=new Set([Math.round(ctx.aqi),ctx.window?.avg].filter(Number.isFinite));
- for(const m of t.matchAll(/\bAQI\s*(?:is\s*|[:=]\s*)?(\d{1,4})\b/gi))if(!allowedAQI.has(Number(m[1])))return false;
+ const numeric='(\\d+(?:\\.\\d+)?)';
+ // Check common native-language labels as well as the English abbreviation.
+ const aqiLabel='(?:\\bAQI\\b|वायु गुणवत्ता सूचकांक|वायु गुणवत्ता सूचक|గాలి నాణ్యత సూచిక|వాయు నాణ్యత సూచిక|காற்றுத் தரக் குறியீடு|বায়ুর মান সূচক|বায়ুর গুণমান সূচক)';
+ for(const m of t.matchAll(new RegExp(aqiLabel+'\\s*(?:is\\s*|of\\s*|[:=]\\s*)?'+numeric,'giu')))if(!allowedAQI.has(Number(m[1])))return false;
+ for(const m of t.matchAll(new RegExp(numeric+'\\s*(?:US\\s+)?AQI\\b','gi')))if(!allowedAQI.has(Number(m[1])))return false;
+ // Current claims cannot borrow the lower forecast-window mean.
+ for(const m of t.matchAll(/(?:current|now|currently)\s+(?:modelled\s+)?(?:US\s+)?AQI\s*(?:is\s*|[:=]\s*)?(\d+(?:\.\d+)?)/gi))if(Number(m[1])!==Math.round(ctx.aqi))return false;
  if(/\b(?:guaranteed safe|zero risk|no risk|risk.free|100\s*%\s*safe)\b/i.test(t))return false;
- for(const m of t.matchAll(/\bPM\s*2\.5\s*(?:concentration\s*)?(?:is\s*|of\s*|[:=]\s*)?(\d+(?:\.\d+)?)\s*(?:µg|μg|ug|micrograms?)/gi))if(!valid(ctx.pm25)||Math.abs(Number(m[1])-ctx.pm25)>.51)return false;
+ if(/\b(?:stop (?:taking|using) (?:your|the)|double (?:your|the) dose|take \d+\s*(?:mg|tablets?))\b/i.test(recommendation))return false;
+ for(const m of t.matchAll(/\bPM\s*2\.5\s*(?:concentration\s*)?(?:is\s*|of\s*|[:=]\s*)?(\d+(?:\.\d+)?)/gi))if(!valid(ctx.pm25)||Math.abs(Number(m[1])-ctx.pm25)>.51)return false;
  const permitted=new Set([ctx.window?.start?.slice(11,16),ctx.window?.end?.slice(11,16)].filter(Boolean));
  for(const m of t.matchAll(/\b(?:[01]\d|2[0-3]):[0-5]\d\b/g))if(!permitted.has(m[0]))return false;
  if(S.effectiveLevel(ctx.aqi,ctx.profile)>=2&&/(?:^|[.!?]\s+)(?:go (?:for a )?|do |try |continue )?(?:run(?:ning)?|jog(?:ging)?|strenuous exercise|intense exercise) (?:outdoors|outside)\b/i.test(recommendation))return false;
@@ -926,11 +933,11 @@ async function ask(q, en) {
   pushMsg('u', q);
   const sf = S.safety(q, st.lang); if (sf) { pushMsg('a', sf, 'urgent'); return; }
   if (!st.ctx || st.demo || st.stale) { pushMsg('a', 'Search a city first and I will answer from its live air data.'); return; }
-  busy = true; const requestSeq=loadSequence, requestProfile=st.profile, requestLang=st.lang; const fb = S.answer(en || q, st.ctx), t = pushMsg('a', 'Thinking…', 'typing'); let result = null;
+  busy = true; const requestSeq=loadSequence, requestProfile=st.profile, requestLang=st.lang; const prompt=String(en||q).trim().toLowerCase(),known=QS.find(x=>x.toLowerCase()===prompt),fb=known?S.answer(known,st.ctx):null,t = pushMsg('a', 'Thinking…', 'typing'); let result = null;
   if (location.protocol.startsWith('http')) { try { result = await viaServer(q); } catch (_) {} }
   if(requestSeq!==loadSequence||requestProfile!==st.profile||requestLang!==st.lang){t.textContent='Context changed. Please ask again.';t.classList.remove('typing');busy=false;return;}
-  const a=result&&result.answer; const text=a||('Local rule-based fallback (English; model data): '+fb);
-  t.textContent=text; if(result&&result.sections&&result.evidence){t.textContent='';for(const [label,key] of [['Recommendation','recommendation'],['Why','reason'],['Limitations','limitation']]){const row=document.createElement('div'),heading=document.createElement('strong'),body=document.createElement('p');heading.textContent=label;body.textContent=result.sections[key];row.append(heading,body);t.append(row);}const evidence=document.createElement('small');evidence.textContent='Open-Meteo / CAMS · US AQI '+Math.round(result.evidence.aqi)+' · '+result.evidence.observedAt+' (UTC)';t.append(evidence);} t.classList.remove('typing'); t.dataset.source=result&&result.source||'local';if(result?.source==='rules')$('aimode').textContent=result.reason==='provider_rate_limit'?'Rule-based · provider busy':'Rule-based · AI unavailable';else if(result?.source==='gemini')$('aimode').textContent='Gemini response';else if(!result)$('aimode').textContent='Local rule-based · server unavailable';else if(result.source==='offtopic')$('aimode').textContent='Outside assistant scope'; $('log').scrollTop = $('log').scrollHeight;
+  const a=typeof result?.answer==='string'&&result.answer.trim()?result.answer:null;const text=a||(fb?'Local rule-based fallback (English; model data): '+fb:'The assistant server is unavailable. I cannot reliably answer this question offline. Use the current dashboard and planner for forecast-based guidance, or try again when the server is available.');
+  t.textContent=text; if(result&&result.sections&&result.evidence){t.textContent='';for(const [label,key] of [['Recommendation','recommendation'],['Why','reason'],['Limitations','limitation']]){const row=document.createElement('div'),heading=document.createElement('strong'),body=document.createElement('p');heading.textContent=label;body.textContent=result.sections[key];row.append(heading,body);t.append(row);}const evidence=document.createElement('small');evidence.textContent='Open-Meteo / CAMS · US AQI '+Math.round(result.evidence.aqi)+' · '+result.evidence.observedAt+' (UTC)';t.append(evidence);} t.classList.remove('typing'); t.dataset.source=result&&result.source||'local';if(result?.source==='rules')$('aimode').textContent=result.reason==='provider_rate_limit'?'Rule-based · provider busy':'Rule-based · AI unavailable';else if(result?.source==='gemini')$('aimode').textContent='Gemini response';else if(!a)$('aimode').textContent=fb?'Local rule-based · server unavailable':'Assistant unavailable · no verified answer';else if(result.source==='offtopic')$('aimode').textContent='Outside assistant scope'; $('log').scrollTop = $('log').scrollHeight;
   st.hist=st.hist.concat([{r:'u',t:q},{r:'a',t:text}]).slice(-8);busy=false;
 }
 

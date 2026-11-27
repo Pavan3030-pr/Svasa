@@ -21,8 +21,17 @@ const topicText={
  ta:{mask:['காற்று மாசுக்காக இப்போது முகக்கவசம் அவசியமில்லாமல் இருக்கலாம்; உங்கள் உணர்திறனைக் கவனியுங்கள்.','வெளியே துகள்களிலிருந்து பாதுகாப்புக்கு நன்றாகப் பொருந்தும் N95 அல்லது FFP2 உதவலாம். அது வாயுக்களிலிருந்து பாதுகாக்காது.'],windows:['உள்ளூர் சூழலைப் பொறுத்து சிறிது நேரம் காற்றோட்டம் ஏற்படுத்துங்கள்.','மாசு அதிகமாக இருந்தால் ஜன்னல்களை மூடி, காற்றுத் தரம் மேம்படும்போது திறக்கலாம்.'],time:['அடுத்த 24 மணி நேர முன்னறிவிப்பில் குறைந்த மாசுள்ள நேரத்தைப் பாருங்கள்.'],child:['குழந்தைகளின் வழக்கமான செயல்பாட்டில் அறிகுறிகளைக் கவனியுங்கள்.','குழந்தைகளின் வெளிப்புற விளையாட்டைக் குறைத்து உள்ளே விளையாடலாம்.'],pollutant:['முகப்பில் மாசுக் கூறுகளைப் பாருங்கள். முக்கிய மாசுக் கூறு: ']},
  bn:{mask:['বায়ুদূষণের জন্য এখন মাস্ক প্রয়োজন নাও হতে পারে; নিজের সংবেদনশীলতা খেয়াল করুন।','বাইরে কণা থেকে সুরক্ষায় ভালোভাবে ফিট করা N95 বা FFP2 সহায়ক হতে পারে। এটি গ্যাস থেকে সুরক্ষা দেয় না।'],windows:['স্থানীয় পরিস্থিতি অনুযায়ী অল্প সময় বাতাস চলাচল করতে দিন।','দূষণ বেশি হলে জানালা বন্ধ রেখে বায়ুর মান উন্নত হলে খোলার কথা বিবেচনা করুন।'],time:['পরবর্তী ২৪ ঘণ্টার পূর্বাভাসে কম দূষণের সময়টি দেখুন।'],child:['শিশুদের স্বাভাবিক কাজের সময় উপসর্গ খেয়াল করুন।','শিশুদের বাইরের খেলা কমিয়ে ঘরে খেলার কথা বিবেচনা করুন।'],pollutant:['ড্যাশবোর্ডে দূষকের বিবরণ দেখুন। প্রধান দূষক: ']}
 };
-const known=Object.freeze({mask:true,windows:true,time:true,child:true,pollutant:true,general:true});
-function intent(q){return patterns.find(([,re])=>re.test(String(q||'')))?.[0]||'general';}
+// Recognize only bounded air-quality guidance, not unrestricted questions.
+const generalPattern=/\b(?:walk(?:ing)?|run(?:ning)?|jog(?:ging)?|exercise|workout|outdoor|outside|precautions?|air quality|aqi|pollution)\b|बाहर|टहल|दौड़|वायु गुणवत्ता|सावधानी|బయట|నడవ|పరిగెత్త|గాలి నాణ్యత|జాగ్రత్త|வெளியே|நடக்க|ஓட|காற்றுத் தர|முன்னெச்சரிக்கை|বাইরে|হাঁট|দৌড়|বায়ুর মান|সতর্কতা/iu;
+const unsupportedPattern=/\b(?:diagnos\w*|prescrib\w*|dosage|dose|cure|medication|medicine|antibiotic|inhaler|stock price|write (?:a )?(?:poem|program|code)|javascript|python|ignore (?:the |all |previous )?instructions)\b|दवा|खुराक|మందు|మోతాదు|மருந்து|மாத்திரை|ওষুধ|ডোজ/iu;
+function intent(q){const t=String(q||'');if(unsupportedPattern.test(t))return 'unsupported';return patterns.find(([,re])=>re.test(t))?.[0]||(generalPattern.test(t)?'general':'unsupported');}
+const unsupportedText={
+ en:'I cannot reliably answer that question using the available rule-based air-quality guidance. Ask about outdoor activity, masks, windows, children, pollutants or forecast timing. For medical decisions, consult a qualified clinician.',
+ hi:'उपलब्ध नियम आधारित वायु गुणवत्ता मार्गदर्शन से इस प्रश्न का विश्वसनीय उत्तर नहीं दे सकता। बाहर की गतिविधि, मास्क, खिड़कियाँ, बच्चों या पूर्वानुमान के बारे में पूछें। चिकित्सा निर्णय के लिए चिकित्सक से सलाह लें।',
+ te:'అందుబాటులో ఉన్న నియమ ఆధారిత గాలి నాణ్యత సూచనలతో ఈ ప్రశ్నకు నమ్మదగిన సమాధానం ఇవ్వలేను. బయట కార్యకలాపాలు, మాస్కులు, కిటికీలు, పిల్లలు లేదా అంచనా సమయం గురించి అడగండి. వైద్య నిర్ణయాలకు వైద్యుడిని సంప్రదించండి.',
+ ta:'கிடைக்கும் விதி சார்ந்த காற்றுத் தர வழிகாட்டுதலால் இந்தக் கேள்விக்கு நம்பகமான பதில் அளிக்க முடியாது. வெளிப்புற செயல்கள், முகக்கவசம், ஜன்னல்கள், குழந்தைகள் அல்லது முன்னறிவிப்பு பற்றி கேளுங்கள். மருத்துவ முடிவுகளுக்கு மருத்துவரை அணுகுங்கள்.',
+ bn:'উপলব্ধ নিয়মভিত্তিক বায়ুর মান নির্দেশনা দিয়ে এই প্রশ্নের নির্ভরযোগ্য উত্তর দিতে পারছি না। বাইরের কাজ, মাস্ক, জানালা, শিশু বা পূর্বাভাস সম্পর্কে জিজ্ঞেস করুন। চিকিৎসার সিদ্ধান্তে চিকিৎসকের পরামর্শ নিন।'
+};
 const unavailableText={en:'AI is unavailable or its response could not be verified. This is limited rule-based guidance, not medical advice.',hi:'एआई उपलब्ध नहीं है या उत्तर सत्यापित नहीं हो सका। यह सीमित नियम आधारित मार्गदर्शन है, चिकित्सा सलाह नहीं।',te:'ఏఐ అందుబాటులో లేదు లేదా జవాబును ధృవీకరించలేకపోయాము. ఇది పరిమిత నియమ ఆధారిత సూచన, వైద్య సలహా కాదు.',ta:'ஏஐ கிடைக்கவில்லை அல்லது பதிலைச் சரிபார்க்க முடியவில்லை. இது வரையறுக்கப்பட்ட விதி சார்ந்த வழிகாட்டுதல், மருத்துவ ஆலோசனை அல்ல.',bn:'এআই উপলব্ধ নয় বা উত্তর যাচাই করা যায়নি। এটি সীমিত নিয়মভিত্তিক নির্দেশনা, চিকিৎসা পরামর্শ নয়।'};
 module.exports=(ctx,question,failure='provider_rate_limit')=>{
  const lang=Object.hasOwn(messages,ctx.lang)?ctx.lang:'en',m=messages[lang],topic=intent(question),high=S.effectiveLevel(ctx.aqi,ctx.profile)>=2,childHigh=S.effectiveLevel(ctx.aqi,'child')>=2;
@@ -39,6 +48,7 @@ module.exports=(ctx,question,failure='provider_rate_limit')=>{
  }else if(topic!=='general'){
    const entries=topicText[lang][topic];if(entries)recommendation=topic==='pollutant'?(dom?entries[0]+dom+'.':entries[0].split(/[:：]/)[0]+'.'):entries[(topic==='child'?childHigh:high)&&entries.length>1?1:0];
  }
+ if(topic==='unsupported')recommendation=unsupportedText[lang];
  if(topic==='time'&&ctx.window&&typeof ctx.window.start==='string'&&typeof ctx.window.end==='string'&&Number.isFinite(ctx.window.avg))reason+=' '+ctx.window.start.slice(0,16).replace('T',' ')+'–'+ctx.window.end.slice(11,16)+' UTC (US AQI '+ctx.window.avg+').';
  if(lang!=='en'&&topic==='mask'){
  const caveat={hi:'दो वर्ष से कम उम्र के बच्चों को मास्क न पहनाएँ; बड़े बच्चों के लिए सही फिट और वयस्क की निगरानी जरूरी है।',te:'రెండేళ్లలోపు పిల్లలకు మాస్క్ పెట్టవద్దు; పెద్ద పిల్లలకు సరైన ఫిట్, పెద్దల పర్యవేక్షణ అవసరం.',ta:'இரண்டு வயதுக்குக் குறைந்த குழந்தைகளுக்கு முகக்கவசம் அணிவிக்க வேண்டாம்; பெரிய குழந்தைகளுக்கு சரியான பொருத்தமும் பெரியவர் கண்காணிப்பும் தேவை.',bn:'দুই বছরের কম বয়সী শিশুকে মাস্ক পরাবেন না; বড় শিশুদের সঠিক ফিট ও প্রাপ্তবয়স্কের তত্ত্বাবধান প্রয়োজন।'};
