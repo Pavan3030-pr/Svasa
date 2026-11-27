@@ -72,7 +72,7 @@
     return s;
   }
   function bestWindow(hours, len) {
-    len = len || 2;
+    len = len == null ? 2 : len;
     if (!Array.isArray(hours) || !Number.isInteger(len) || len < 1 || hours.length < len) return null;
     let best = null;
     for (let i = 0; i + len <= hours.length; i++) {
@@ -255,6 +255,42 @@
     for(const r of PM_BP){if(x<=r[1])return Math.round((r[3]-r[2])/(r[1]-r[0])*(x-r[0])+r[2])}
     return 500;
   }
-  const api = { pm25ToAqi, dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
+
+  // Concentration-time proxy (µg·h/m³), not inhaled dose or health outcome.
+  function optimizeDay(hours, activities, profile) {
+    if (!Array.isArray(hours) || !Array.isArray(activities) || !activities.length || activities.length > 4) return null;
+    const h=hours.slice(0,24), n=h.length;
+    const rows=activities.map(a=>{
+      if(!a||!Number.isInteger(a.duration)||a.duration<1||a.duration>4||!Number.isInteger(a.earliest)||!Number.isInteger(a.latest)||!Number.isInteger(a.preferred)||a.earliest<0||a.latest>n||a.preferred<a.earliest||a.preferred+a.duration>a.latest)return null;
+      const options=[];
+      for(let i=a.earliest;i+a.duration<=a.latest;i++){
+        const b=h.slice(i,i+a.duration);
+        if(b.length!==a.duration||!b.every((x,j)=>x&&band(x.aqi)&&Number.isFinite(x.pm2_5)&&x.pm2_5>=0&&typeof x.time==='string'&&(!j||plusHour(b[j-1].time)===x.time)))continue;
+        const peak=Math.max(...b.map(x=>x.aqi)), exposure=b.reduce((s,x)=>s+x.pm2_5,0);
+        options.push({index:i,endIndex:i+a.duration,start:h[i].time,end:plusHour(b[b.length-1].time),exposure,peak,caution:effectiveLevel(peak,profile)>=2});
+      }
+      return {options,baseline:options.find(x=>x.index===a.preferred)};
+    });
+    if(rows.some(r=>!r||!r.options.length))return null;
+    const memo=new Map();
+    function solve(k,end){
+      if(k===rows.length)return {risk:0,exposure:0,slots:[]};
+      const key=k+':'+end;if(memo.has(key))return memo.get(key);
+      let best=null;
+      for(const o of rows[k].options){
+        if(o.index<end)continue;
+        const tail=solve(k+1,o.endIndex);if(!tail)continue;
+        const risk=Number(o.caution)+tail.risk, exposure=o.exposure+tail.exposure;
+        if(!best||risk<best.risk||(risk===best.risk&&exposure<best.exposure))best={risk,exposure,slots:[o,...tail.slots]};
+      }
+      memo.set(key,best);return best;
+    }
+    const result=solve(0,0);if(!result)return null;
+    const b=rows.map(r=>r.baseline);
+    const baseline=b.every((x,i)=>x&&(!i||b[i-1].endIndex<=x.index))?b.reduce((sum,x)=>sum+x.exposure,0):null;
+    return {...result,baseline,changePct:baseline>0?Math.round((baseline-result.exposure)/baseline*100):null};
+  }
+
+  const api = { optimizeDay, pm25ToAqi, dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Svasa = api;
 })(typeof window !== 'undefined' ? window : globalThis);

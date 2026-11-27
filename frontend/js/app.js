@@ -4,7 +4,7 @@ const S = window.Svasa, $ = id => document.getElementById(id);
 const AQ = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
 const WX = 'https://api.open-meteo.com/v1/forecast';
-const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask'];
+const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask', 'family'];
 const st = { profile: 'general', place: null, data: null, wx: null, demo: false, stale: null, ctx: null, lang: 'en', hist: [], serverAI: false };
 let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer;
 
@@ -30,7 +30,8 @@ function demo() {
 let loadSequence = 0;
 async function load(p) {
   const seq = ++loadSequence;
-  st.ctx = null; st.data = null; st.hist = []; lastLvl = null;
+  if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
+  st.ctx = null; st.data = null; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = true;
   $('hero').textContent = 'Loading current air data…';
   st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
@@ -103,6 +104,7 @@ function render() {
   st.hrs = hrs; drawStrip(hrs); drawDisp(); drawChart(hrs, win); drawHistory(c);
   $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
   if (!st.demo && !st.stale) notifyCheck(aqi);
+  renderFamily(); renderActivityTimes();
 }
 function drawChart(h, win) {
   if (!h.length) { $('chart').innerHTML = '<p class="muted">No hourly forecast available.</p>'; return; }
@@ -110,8 +112,8 @@ function drawChart(h, win) {
   const max = Math.max(150, ...h.map(x => x.aqi || 0)), Y = v => base - v / max * (base - top);
   const grid = [50, 100, 150, 200, 300].filter(v => v <= max).map(v => `<line x1="${L}" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e4e8eb"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`).join('');
   const bars = h.map((x, i) => {
-    const v = x.aqi || 0, bb = S.band(v), inw = win && i >= win.index && i < win.index + 2, cx = L + i * 26 + 14, y = Y(v);
-    return `<g data-i="${i}"><rect x="${L + i * 26 + 4}" y="${y}" width="20" height="${Math.max(2, base - y)}" rx="5" fill="${bb.color}"${inw ? ' stroke="#0f1f23" stroke-width="2.5"' : ''}/><text class="v" x="${cx}" y="${y - 4}" text-anchor="middle">${Math.round(v)}</text>${i % 3 === 0 ? `<text x="${cx}" y="${H - 10}" text-anchor="middle">${x.time.slice(11, 13)}h</text>` : ''}</g>`;
+    const known = S.band(x.aqi), v = known ? x.aqi : 0, bb = known || {color:'#a3afa8'}, inw = win && i >= win.index && i < win.index + 2, cx = L + i * 26 + 14, y = Y(v);
+    return `<g data-i="${i}"><rect x="${L + i * 26 + 4}" y="${y}" width="20" height="${Math.max(2, base - y)}" rx="5" fill="${bb.color}"${inw ? ' stroke="#0f1f23" stroke-width="2.5"' : ''}/><text class="v" x="${cx}" y="${y - 4}" text-anchor="middle">${known ? Math.round(v) : '—'}</text>${i % 3 === 0 ? `<text x="${cx}" y="${H - 10}" text-anchor="middle">${x.time.slice(11, 13)}h</text>` : ''}</g>`;
   }).join('');
   $('chart').innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Hourly AQI for the next 24 hours with values. Outlined bars mark the cleanest window.">${grid}${bars}</svg>` + legend();
 }
@@ -337,6 +339,42 @@ $('onbchips').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<button ty
 $('onbchips').onclick = e => { const b = e.target.closest('button'); if (!b) return; st.profile = b.dataset.k; $('profile').value = st.profile; store.set('svasa_onb', 1); $('onb').hidden = true; if (st.data) render(); };
 $('onbskip').onclick = () => { store.set('svasa_onb', 1); $('onb').hidden = true; };
 $('onb').hidden = !!store.get('svasa_onb', 0);
+
+
+/* ---------- personal day and family ---------- */
+let activities=[{name:'Commute',duration:1,preferred:0,flex:2}];
+let family=store.get('svasa_family',[]);
+if(!Array.isArray(family))family=[];
+family=family.filter(x=>x&&typeof x.name==='string'&&Object.hasOwn(S.PROFILES,x.profile)).slice(0,6);
+const forecast=()=>st.data&&!st.demo&&!st.stale?S.hourlyFrom(st.data,st.data.current.time):[];
+function renderActivityTimes(){
+  const hrs=forecast(), box=$('activities');
+  box.innerHTML=activities.map((x,i)=>{
+    const choices=hrs.map((t,j)=>'<option value="'+j+'"'+(j===x.preferred?' selected':'')+'>'+esc(t.time.replace('T',' '))+'</option>').join('');
+    return '<div class="activityrow"><label>Activity<select data-field="name" data-i="'+i+'">'+['Commute','Walk','Workout','School','Shopping','Other'].map(n=>'<option'+(x.name===n?' selected':'')+'>'+n+'</option>').join('')+'</select></label><label>Preferred start<select data-field="preferred" data-i="'+i+'"'+(!hrs.length?' disabled':'')+'>'+(choices||'<option>Forecast unavailable</option>')+'</select></label><label>Hours<select data-field="duration" data-i="'+i+'">'+[1,2,3,4].map(n=>'<option'+(x.duration===n?' selected':'')+'>'+n+'</option>').join('')+'</select></label><label>Flexibility<select data-field="flex" data-i="'+i+'">'+[0,1,2,4,6].map(n=>'<option value="'+n+'"'+(x.flex===n?' selected':'')+'>'+ (n?'±'+n+'h':'Fixed')+'</option>').join('')+'</select></label><button type="button" class="btn ghost sm" data-remove="'+i+'" aria-label="Remove activity '+(i+1)+'">Remove</button></div>';
+  }).join('');
+  $('addactivity').disabled=activities.length>=4;
+  $('optimizeday').disabled=!hrs.length||!activities.length;
+}
+$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);$('dayresult').textContent='Plan changed. Optimize again.';};
+$('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)return;activities.splice(Number(b.dataset.remove),1);renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
+$('addactivity').onclick=()=>{if(activities.length>=4)return;activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
+$('optimizeday').onclick=()=>{
+  const hrs=forecast(), items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
+  const plan=S.optimizeDay(hrs,items,st.profile);
+  if(!plan){$('dayresult').textContent='No feasible schedule with complete data. Widen time flexibility, shorten durations or change preferred times.';return;}
+  const change=plan.changePct==null?'Original schedule unavailable or overlapping.':(plan.changePct>=0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
+  $('dayresult').innerHTML='<p class="section-kicker">YOUR PROPOSED SCHEDULE</p><h3>'+plan.exposure.toFixed(1)+' µg·h/m³</h3><p>'+esc(change)+'</p>'+plan.slots.map((x,i)=>'<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>').join('')+(plan.risk?'<p class="alert">Some windows still need caution. Consider moving those activities indoors.</p>':'');
+};
+function renderFamily(){
+  const box=$('familyresults'), live=st.data&&!st.demo&&!st.stale;
+  box.innerHTML=family.length?family.map((x,i)=>'<article class="familymember"><p class="section-kicker">'+esc(S.PROFILES[x.profile].name)+'</p><h3>'+esc(x.name)+'</h3><p>'+esc(live?S.advice(st.data.current.us_aqi,x.profile).go:'Fresh data required for current advice.')+'</p><button type="button" class="btn ghost sm" data-family-use="'+i+'">Use profile</button> <button type="button" class="btn ghost sm" data-family-remove="'+i+'">Remove</button></article>').join(''):'<p class="muted">Add a profile to see personalized guidance here.</p>';
+}
+$('familyprofile').innerHTML=Object.entries(S.PROFILES).map(([k,v])=>'<option value="'+k+'">'+esc(v.name)+'</option>').join('');
+$('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value.trim(),profile=$('familyprofile').value;if(!name||family.length>=6||!Object.hasOwn(S.PROFILES,profile)){banner('Add a nickname; up to six profiles are supported.');return;}family.push({name,profile});store.set('svasa_family',family);$('familyname').value='';renderFamily();};
+$('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){family.splice(Number(b.dataset.familyRemove),1);store.set('svasa_family',family);renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;st.profile=x.profile;$('profile').value=x.profile;if(st.data)render();show('today');}};
+$('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderFamily();};
+renderActivityTimes();renderFamily();
 
 /* ---------- boot ---------- */
 show(location.hash.slice(1));
