@@ -7,4 +7,38 @@ const messages={
  ta:['வெளியில் செலவிடும் நேரத்தைக் குறைத்து, அதிக போக்குவரத்து உள்ள இடங்களைத் தவிர்க்கலாம்.','தீவிரமான வெளிப்புற உடற்பயிற்சியை உள்ளே செய்யலாம்.','தற்போதைய மாதிரி அடிப்படையிலான காற்றுத் தரக் குறியீடு: ','ஏஐ சேவையின் கோரிக்கை வரம்பு எட்டப்பட்டுள்ளது. இது விதி அடிப்படையிலான பொதுவான வழிகாட்டுதல், தனிப்பட்ட அல்லது மருத்துவ ஆலோசனை அல்ல.'],
  bn:['বাইরে কম সময় কাটানো এবং বেশি যানজটের এলাকা এড়ানোর কথা বিবেচনা করুন।','কঠোর বাইরের ব্যায়াম ঘরের ভিতরে করার কথা বিবেচনা করুন।','বর্তমান মডেলভিত্তিক বায়ুর মান সূচক: ','এআই পরিষেবার অনুরোধের সীমা পূর্ণ হয়েছে। এটি নিয়মভিত্তিক সাধারণ নির্দেশনা, ব্যক্তিগত বা চিকিৎসা পরামর্শ নয়।']
 };
-module.exports=ctx=>{const m=Object.hasOwn(messages,ctx.lang)?messages[ctx.lang]:messages.en;return {kind:'air',recommendation:m[S.effectiveLevel(ctx.aqi,ctx.profile)>=2?1:0],reason:m[2]+Math.round(ctx.aqi)+' (US AQI).',limitation:m[3]};};
+// Deterministic intent matching, not diagnosis or unrestricted chat.
+const patterns=[
+ ['mask',/\b(mask|n95|ffp2|respirator)\b|मास्क|మాస్క్|முகக்கவசம்|মাস্ক/iu],
+ ['windows',/\b(windows?|ventilat\w*)\b|खिड़क|కిటికీ|కిటికీలు|ஜன்னல்|জানালা/iu],
+ ['time',/\b(best time|cleanest|when|forecast)\b|सबसे अच्छा समय|ఉత్తమ సమయం|சிறந்த நேரம்|সেরা সময়/iu],
+ ['child',/\b(child|children|kid|baby|school)\b|बच्च|బిడ్డ|குழந்தை|শিশু|বাচ্চা/iu],
+ ['pollutant',/\b(pollutant|polluting|pm2\.5|pm10|what is polluting)\b|प्रदूषण|కాలుష్యం|மாசு|দূষণ/iu]
+];
+const topicText={
+ hi:{mask:['वायु प्रदूषण के लिए अभी मास्क आवश्यक नहीं हो सकता; अपनी संवेदनशीलता पर ध्यान दें।','बाहर कणों से बचाव के लिए अच्छी तरह फिट होने वाला N95 या FFP2 मास्क उपयोगी हो सकता है। यह गैसों से सुरक्षा नहीं देता।'],windows:['स्थानीय परिस्थितियों को ध्यान में रखकर थोड़ी देर हवा आने दें।','प्रदूषण अधिक होने पर खिड़कियाँ बंद रखने और साफ समय में हवा आने देने पर विचार करें।'],time:['अगले 24 घंटे के पूर्वानुमान में कम प्रदूषण वाला समय देखें।'],child:['बच्चों की गतिविधि सामान्य रखें लेकिन लक्षणों पर ध्यान दें।','बच्चों का बाहर खेलना सीमित करें और घर के अंदर खेलने पर विचार करें।'],pollutant:['डैशबोर्ड में प्रदूषकों का विवरण देखें। प्रमुख प्रदूषक: ']},
+ te:{mask:['వాయు కాలుష్యం కోసం ప్రస్తుతం మాస్క్ అవసరం లేకపోవచ్చు; మీ సున్నితత్వాన్ని గమనించండి.','బయట కణాల నుంచి రక్షణకు సరిగ్గా సరిపోయే N95 లేదా FFP2 ఉపయోగపడవచ్చు. ఇది వాయువుల నుంచి రక్షించదు.'],windows:['స్థానిక పరిస్థితులను బట్టి కొద్దిసేపు గాలి రానివ్వండి.','కాలుష్యం ఎక్కువగా ఉన్నప్పుడు కిటికీలు మూసి, గాలి మెరుగుపడినప్పుడు తెరవడాన్ని పరిగణించండి.'],time:['రాబోయే 24 గంటల అంచనాలో తక్కువ కాలుష్యం ఉన్న సమయాన్ని చూడండి.'],child:['పిల్లల సాధారణ కార్యకలాపాల్లో లక్షణాలను గమనించండి.','పిల్లల బయట ఆటను తగ్గించి, ఇంట్లో ఆటను పరిగణించండి.'],pollutant:['డ్యాష్‌బోర్డ్‌లో కాలుష్య కారకాల వివరాలు చూడండి. ప్రధాన కారకం: ']},
+ ta:{mask:['காற்று மாசுக்காக இப்போது முகக்கவசம் அவசியமில்லாமல் இருக்கலாம்; உங்கள் உணர்திறனைக் கவனியுங்கள்.','வெளியே துகள்களிலிருந்து பாதுகாப்புக்கு நன்றாகப் பொருந்தும் N95 அல்லது FFP2 உதவலாம். அது வாயுக்களிலிருந்து பாதுகாக்காது.'],windows:['உள்ளூர் சூழலைப் பொறுத்து சிறிது நேரம் காற்றோட்டம் ஏற்படுத்துங்கள்.','மாசு அதிகமாக இருந்தால் ஜன்னல்களை மூடி, காற்றுத் தரம் மேம்படும்போது திறக்கலாம்.'],time:['அடுத்த 24 மணி நேர முன்னறிவிப்பில் குறைந்த மாசுள்ள நேரத்தைப் பாருங்கள்.'],child:['குழந்தைகளின் வழக்கமான செயல்பாட்டில் அறிகுறிகளைக் கவனியுங்கள்.','குழந்தைகளின் வெளிப்புற விளையாட்டைக் குறைத்து உள்ளே விளையாடலாம்.'],pollutant:['முகப்பில் மாசுக் கூறுகளைப் பாருங்கள். முக்கிய மாசுக் கூறு: ']},
+ bn:{mask:['বায়ুদূষণের জন্য এখন মাস্ক প্রয়োজন নাও হতে পারে; নিজের সংবেদনশীলতা খেয়াল করুন।','বাইরে কণা থেকে সুরক্ষায় ভালোভাবে ফিট করা N95 বা FFP2 সহায়ক হতে পারে। এটি গ্যাস থেকে সুরক্ষা দেয় না।'],windows:['স্থানীয় পরিস্থিতি অনুযায়ী অল্প সময় বাতাস চলাচল করতে দিন।','দূষণ বেশি হলে জানালা বন্ধ রেখে বায়ুর মান উন্নত হলে খোলার কথা বিবেচনা করুন।'],time:['পরবর্তী ২৪ ঘণ্টার পূর্বাভাসে কম দূষণের সময়টি দেখুন।'],child:['শিশুদের স্বাভাবিক কাজের সময় উপসর্গ খেয়াল করুন।','শিশুদের বাইরের খেলা কমিয়ে ঘরে খেলার কথা বিবেচনা করুন।'],pollutant:['ড্যাশবোর্ডে দূষকের বিবরণ দেখুন। প্রধান দূষক: ']}
+};
+const known=Object.freeze({mask:true,windows:true,time:true,child:true,pollutant:true,general:true});
+function intent(q){return patterns.find(([,re])=>re.test(String(q||'')))?.[0]||'general';}
+module.exports=(ctx,question)=>{
+ const lang=Object.hasOwn(messages,ctx.lang)?ctx.lang:'en',m=messages[lang],topic=intent(question),high=S.effectiveLevel(ctx.aqi,ctx.profile)>=2,childHigh=S.effectiveLevel(ctx.aqi,'child')>=2;
+ const dom=Object.hasOwn(S.POLLUTANTS,ctx.dominant)?S.POLLUTANTS[ctx.dominant].name:null;
+ let recommendation=m[high?1:0],reason=m[2]+Math.round(ctx.aqi)+' (US AQI).';
+ if(topic==='general'&&lang==='en')recommendation=S.advice(ctx.aqi,ctx.profile).go;
+ if(lang==='en'){
+   const a=S.advice(ctx.aqi,ctx.profile);
+   if(topic==='mask')recommendation=a.mask+' Respirators do not filter all gases.';
+   if(topic==='windows')recommendation=a.windows+' Consider indoor conditions too.';
+   if(topic==='child')recommendation=S.advice(ctx.aqi,'child').exercise;
+   if(topic==='time')recommendation='Review the next 24 hours and choose a lower-pollution window. If peak pollution remains high, consider indoor activity.';
+   if(topic==='pollutant')recommendation=dom?'Modelled dominant pollutant: '+dom+'. See the dashboard for its concentration.':'A dominant pollutant could not be determined; see the dashboard.';
+ }else if(topic!=='general'){
+   const entries=topicText[lang][topic];if(entries)recommendation=topic==='pollutant'?(dom?entries[0]+dom+'.':entries[0].split(/[:：]/)[0]+'.'):entries[(topic==='child'?childHigh:high)&&entries.length>1?1:0];
+ }
+ if(topic==='time'&&ctx.window&&typeof ctx.window.start==='string'&&typeof ctx.window.end==='string'&&Number.isFinite(ctx.window.avg))reason+=' '+ctx.window.start.slice(0,16).replace('T',' ')+'–'+ctx.window.end.slice(11,16)+' UTC (US AQI '+ctx.window.avg+').';
+ return {kind:'air',recommendation,reason,limitation:m[3]};
+};
+module.exports.intent=intent;

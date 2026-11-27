@@ -15,4 +15,11 @@ const call=(o)=>new Promise(r=>{const res={headers:{},setHeader(k,v){this.header
  assert.equal((await call({body:{q:'a'.repeat(5000),ctx}})).code,413);
  global.fetch=async u=>String(u).includes('air-quality-api')?{ok:true,json:async()=>airFixture()}:{ok:false,status:429};
  for(const [lang,script] of [['en',/[A-Za-z]/],['hi',/[\u0900-\u097f]/],['te',/[\u0c00-\u0c7f]/],['ta',/[\u0b80-\u0bff]/],['bn',/[\u0980-\u09ff]/]]){r=await call({body:{q:'Can I walk?',ctx:{...ctx,lang}}});assert.equal(r.code,200);assert.equal(r.b.source,'rules');assert.equal(r.b.reason,'provider_rate_limit');for(const field of ['recommendation','reason','limitation'])assert.match(r.b.sections[field],script);assert.equal(r.b.evidence.aqi,160);}
+ const fallback=require('../backend/lib/quota-guidance'),ground={aqi:160,profile:'general',lang:'en',dominant:'pm2_5',window:{start:'2026-11-27T09:00',end:'2026-11-27T11:00',avg:90}};
+ assert.match(fallback(ground,'Do I need a mask?').recommendation,/N95/);
+ assert.match(fallback(ground,'Should I open windows?').recommendation,/windows/i);
+ assert.match(fallback(ground,'Best time to go out?').reason,/09:00–11:00 UTC/);
+ assert.match(fallback(ground,'What is polluting the air?').recommendation,/PM2.5/);
+ const localized=[['hi','क्या मुझे मास्क चाहिए?','क्या खिड़कियाँ खोलूँ?'],['te','నాకు మాస్క్ అవసరమా?','కిటికీలు తెరవాలా?'],['ta','எனக்கு முகக்கவசம் தேவையா?','ஜன்னல்களைத் திறக்கலாமா?'],['bn','আমার কি মাস্ক দরকার?','জানালা খুলব?']];
+ for(const [lang,mask,windows] of localized){const one=fallback({...ground,lang},mask),two=fallback({...ground,lang},windows);assert.match(one.recommendation,/N95/);assert.notEqual(one.recommendation,two.recommendation);assert.equal(fallback.intent(windows),'windows');}
  console.log('vercel function tests passed');process.exit(0)})();
