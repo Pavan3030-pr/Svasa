@@ -49,24 +49,26 @@
   function mask(aqi, profile) {
     const lvl = effectiveLevel(aqi, profile);
     if (lvl < 0) return 'Air data unavailable; check a current reliable source.';
-    if (lvl <= 1) return 'No mask needed.';
-    if (lvl === 2) return 'Optional. A well-fitted N95 or FFP2 helps if you will be outside for long.';
-    return 'Wear a well-fitted N95 or FFP2 outdoors. Cloth and surgical masks do not filter fine particles well.';
+    if(profile==='child')return 'Prioritize reducing exposure. Never mask children under 2; older children need an age-appropriate fit and adult supervision.';
+    if (lvl <= 1) return 'A particle respirator may not be necessary; consider your symptoms and local conditions.';
+    if (lvl === 2) return 'Optional. A well-fitted N95 or FFP2 can reduce particle exposure; it does not protect against gases.';
+    return 'If going outdoors is unavoidable, a well-fitted N95 or FFP2 can reduce particle exposure, not gases. Seek medical advice if wearing one is difficult.';
   }
   function advice(aqi, profile) {
     const lvl = effectiveLevel(aqi, profile);
     const sens = profile !== 'general';
     const sets = [
-      { go: 'Great day to be outside.', exercise: 'Normal outdoor exercise is fine.', windows: 'Open windows to ventilate.', purifier: 'Not needed.' },
-      { go: 'Fine for most outdoor plans.', exercise: sens ? 'Keep exercise moderate and watch for coughing or tightness.' : 'Normal outdoor exercise is fine.', windows: 'Ventilate briefly, away from busy roads.', purifier: 'Optional.' },
-      { go: 'Shorten time outdoors, especially near traffic.', exercise: 'Move workouts indoors or make them light.', windows: 'Keep windows mostly closed at busy hours.', purifier: 'Run one in the room you use most.' },
-      { go: 'Limit outdoor trips to what you need.', exercise: 'Exercise indoors today.', windows: 'Keep windows closed.', purifier: 'Run a HEPA purifier.' },
-      { go: 'Stay indoors where possible.', exercise: 'Skip outdoor activity.', windows: 'Keep windows and doors closed.', purifier: 'Run a HEPA purifier on high.' },
-      { go: 'Stay indoors. Avoid all outdoor activity.', exercise: 'No exercise outdoors.', windows: 'Seal gaps and keep everything closed.', purifier: 'Run a HEPA purifier on high.' }
+      { go: 'Lower pollution according to the model. Check local conditions.', exercise: 'Usual activity may be reasonable if you feel well.', windows: 'Ventilate when outdoor air is cleaner than indoor air.', purifier: 'Consider indoor air quality and your needs.' },
+      { go: 'Many outdoor plans may be reasonable; sensitive people should take care.', exercise: 'Adjust intensity if you have symptoms or are unusually sensitive.', windows: 'Ventilate during cleaner periods, away from traffic.', purifier: 'Consider filtration if indoor particle levels are high.' },
+      { go: 'Shorten time outdoors, especially near traffic.', exercise: 'Move workouts indoors or make them light.', windows: 'Reduce outdoor air entry during pollution peaks, if indoor temperature and ventilation remain safe.', purifier: 'Run one in the room you use most.' },
+      { go: 'Limit outdoor trips to what you need.', exercise: 'Exercise indoors today.', windows: 'Keep windows closed during pollution peaks if safe; ventilate during cleaner periods.', purifier: 'Run a HEPA purifier.' },
+      { go: 'Stay indoors where possible.', exercise: 'Skip outdoor activity.', windows: 'Limit outdoor air entry if safe; seek a cooler, cleaner indoor space if needed.', purifier: 'Run a HEPA purifier on high.' },
+      { go: 'Stay indoors. Avoid all outdoor activity.', exercise: 'No exercise outdoors.', windows: 'Use a cooler, cleaner indoor space. Never sacrifice safe ventilation or ignore indoor smoke, heat or carbon monoxide alarms.', purifier: 'Run a HEPA purifier on high.' }
     ];
     if (lvl < 0) return {go:'Air quality unavailable.',exercise:'No current recommendation.',windows:'No current recommendation.',purifier:'No current recommendation.',mask:mask(aqi,profile),urgent:false,symptoms:''};
     const s = Object.assign({}, sets[lvl]);
     s.mask = mask(aqi, profile);
+    if(lvl>=2)s.windows+=' Avoid indoor smoke and never block required ventilation.';
     s.urgent = lvl >= 3;
     s.symptoms = sens && lvl >= 2 ? 'If you get wheezing, chest tightness or unusual breathlessness, rest indoors and contact your doctor. Seek emergency care if severe.' : '';
     return s;
@@ -112,7 +114,7 @@
     if (/run|jog|exercise|gym|workout|walk|cycle|bike|sport/.test(t)) return `${a.exercise}${time}`;
     if (/window|ventilat|open/.test(t)) return a.windows;
     if (/purifier|filter|hepa/.test(t)) return a.purifier;
-    if (/child|kid|school|baby/.test(t)) return effectiveLevel(ctx.aqi, 'child') >= 2 ? 'For children, cut outdoor play time and avoid busy roads. Indoor play is better today.' : 'Outdoor play is fine today.';
+    if (/child|kid|school|baby/.test(t)) return effectiveLevel(ctx.aqi, 'child') >= 2 ? 'For children, cut outdoor play time and avoid busy roads. Indoor play is better today.' : 'Usual outdoor play may be reasonable; watch for symptoms and local conditions.';
     if (/when|best time|cleanest|go out/.test(t)) return w ? time.trim() : 'No hourly forecast is available.';
     if (/why|cause|pollutant|pm2|what.*in the air/.test(t)) return ctx.dominant ? `${POLLUTANTS[ctx.dominant].name} is driving the index. ${POLLUTANTS[ctx.dominant].note}` : 'No pollutant breakdown is available.';
     return `AQI is ${Math.round(ctx.aqi)} (${b.label}). ${a.go}${time}`;
@@ -223,10 +225,10 @@
     const t=cleanQuery(q).toLowerCase();
     if(ctx&&ctx.aqi!=null){
       const lvl=effectiveLevel(ctx.aqi,ctx.profile),w=ctx.window,tm=w?' Cleanest hours: '+w.start.slice(11,16)+'-'+w.end.slice(11,16)+'.':'';
-      if(/\b(pets?|dogs?|cats?)\b/.test(t))return lvl>=2?'Keep pets indoors as much as possible and shorten walks to the cleanest hours.'+tm:'Normal walks are fine for pets. Watch for coughing.';
+      if(/\b(pets?|dogs?|cats?)\b/.test(t))return lvl>=2?'Keep pets indoors as much as possible and shorten walks to the cleanest hours.'+tm:'Usual walks may be reasonable for pets. Watch for coughing and local conditions.';
       if(/\bplants?\b|garden/.test(t))return 'Outdoor gardening is fine in light haze; limit it when AQI is high. Indoor plants do little for air quality compared with ventilation or a HEPA purifier.';
       if(/laundry|clothes|drying/.test(t))return lvl>=2?'Dry clothes indoors or under cover today to keep pollutants off them.':'Outdoor drying is fine today.';
-      if(/sleep|bedroom|night/.test(t))return lvl>=2?'Keep bedroom windows closed and run a purifier overnight if you have one.':'Air is fine. Ventilate the bedroom before bed.';
+      if(/sleep|bedroom|night/.test(t))return lvl>=2?'Keep bedroom windows closed during pollution peaks if safe, and use particle filtration if available. Maintain safe temperature and ventilation.':'Ventilate when outdoor air is cleaner and indoor conditions permit.';
       if(/drive|car|commute|bike|scooter|two.?wheeler|bus\b/.test(t))return 'Use recirculate mode in the car and avoid peak traffic hours.'+(lvl>=3?' On a two-wheeler, wear an N95.':'')+tm;
       if(/cook|incense|candle|indoor|agarbatti/.test(t))return 'Use the exhaust fan while cooking and skip incense or candles when outdoor air is poor, since indoor sources add to PM2.5.';
       if(/naqi|india|index|us aqi|standard/.test(t))return 'The headline number is US AQI. India NAQI is shown below it for comparison and is estimated from current pollutant levels.';

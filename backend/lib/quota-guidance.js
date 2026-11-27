@@ -31,15 +31,22 @@ module.exports=(ctx,question,failure='provider_rate_limit')=>{
  if(topic==='general'&&lang==='en')recommendation=S.advice(ctx.aqi,ctx.profile).go;
  if(lang==='en'){
    const a=S.advice(ctx.aqi,ctx.profile);
-   if(topic==='mask')recommendation=a.mask+' Respirators do not filter all gases.';
-   if(topic==='windows')recommendation=a.windows+' Consider indoor conditions too.';
-   if(topic==='child')recommendation=S.advice(ctx.aqi,'child').exercise;
+   if(topic==='mask')recommendation=(/\b(child|children|kid|baby|infant|toddler)\b/i.test(question)?S.mask(ctx.aqi,'child'):a.mask)+' Respirators do not protect against gases.';
+   if(topic==='windows')recommendation=a.windows+' Maintain safe temperature and ventilation.';
+   if(topic==='child')recommendation=S.advice(ctx.aqi,'child').exercise+' Watch for symptoms.';
    if(topic==='time')recommendation='Review the next 24 hours and choose a lower-pollution window. If peak pollution remains high, consider indoor activity.';
    if(topic==='pollutant')recommendation=dom?'Modelled dominant pollutant: '+dom+'. See the dashboard for its concentration.':'A dominant pollutant could not be determined; see the dashboard.';
  }else if(topic!=='general'){
    const entries=topicText[lang][topic];if(entries)recommendation=topic==='pollutant'?(dom?entries[0]+dom+'.':entries[0].split(/[:：]/)[0]+'.'):entries[(topic==='child'?childHigh:high)&&entries.length>1?1:0];
  }
  if(topic==='time'&&ctx.window&&typeof ctx.window.start==='string'&&typeof ctx.window.end==='string'&&Number.isFinite(ctx.window.avg))reason+=' '+ctx.window.start.slice(0,16).replace('T',' ')+'–'+ctx.window.end.slice(11,16)+' UTC (US AQI '+ctx.window.avg+').';
+ if(lang!=='en'&&topic==='mask'){
+ const caveat={hi:'दो वर्ष से कम उम्र के बच्चों को मास्क न पहनाएँ; बड़े बच्चों के लिए सही फिट और वयस्क की निगरानी जरूरी है।',te:'రెండేళ్లలోపు పిల్లలకు మాస్క్ పెట్టవద్దు; పెద్ద పిల్లలకు సరైన ఫిట్, పెద్దల పర్యవేక్షణ అవసరం.',ta:'இரண்டு வயதுக்குக் குறைந்த குழந்தைகளுக்கு முகக்கவசம் அணிவிக்க வேண்டாம்; பெரிய குழந்தைகளுக்கு சரியான பொருத்தமும் பெரியவர் கண்காணிப்பும் தேவை.',bn:'দুই বছরের কম বয়সী শিশুকে মাস্ক পরাবেন না; বড় শিশুদের সঠিক ফিট ও প্রাপ্তবয়স্কের তত্ত্বাবধান প্রয়োজন।'};
+ if(ctx.profile==='child'||/\b(child|children|kid|baby|infant|toddler)\b|बच्च|బిడ్డ|పిల్ల|குழந்தை|শিশু|বাচ্চা/iu.test(question))recommendation=caveat[lang];
+ }
+ if(lang!=='en'&&topic==='windows'){
+ const caveat={hi:'सुरक्षित तापमान और वेंटिलेशन बनाए रखें।',te:'సురక్షిత ఉష్ణోగ్రత, గాలి ప్రసరణ ఉండేలా చూసుకోండి.',ta:'பாதுகாப்பான வெப்பநிலையையும் காற்றோட்டத்தையும் பராமரிக்கவும்.',bn:'নিরাপদ তাপমাত্রা ও বায়ুচলাচল বজায় রাখুন।'};recommendation+=' '+caveat[lang];
+ }
  return {kind:'air',recommendation,reason,limitation:failure==='provider_rate_limit'?m[3]:unavailableText[lang]};
 };
 module.exports.intent=intent;

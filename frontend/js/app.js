@@ -107,7 +107,7 @@ function render() {
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
   renderRail(c,hrs,win);st.hrs = hrs; drawStrip(hrs,win); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);loadHistory();}
-  $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
+  $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Modelled AQI ${Math.round(aqi)}: choose a comfortable, cleaner indoor space with safe ventilation and temperature. Stop if dizzy or breathless.` : `Modelled AQI ${Math.round(aqi)}: practise gently if comfortable. Stop if dizzy or breathless; this is not treatment.`;
   if (!st.demo && !st.stale) notifyCheck(aqi);
   if(location.hash==='#family')renderFamily(); if(location.hash==='#plan')renderActivityTimes();
 }

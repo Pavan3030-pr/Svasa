@@ -4,7 +4,8 @@ t('band boundaries', () => { assert.equal(S.band(50).key, 'good'); assert.equal(
 t('profile raises severity', () => { assert.equal(S.effectiveLevel(80, 'general'), 1); assert.equal(S.effectiveLevel(80, 'asthma'), 2); assert.equal(S.effectiveLevel(999, 'child'), 5); });
 t('dominant pollutant', () => { assert.equal(S.dominant({ us_aqi_pm2_5: 120, us_aqi_ozone: 40 }), 'pm2_5'); assert.equal(S.dominant({}), null); assert.equal(S.dominant(null), null); });
 t('who ratio', () => { assert.equal(S.whoRatio('pm2_5', 75), 5); assert.equal(S.whoRatio('nope', 1), null); });
-t('mask logic', () => { assert.match(S.mask(30, 'general'), /No mask/); assert.match(S.mask(180, 'general'), /N95/); assert.match(S.mask(90, 'asthma'), /Optional/); });
+t('mask logic', () => { assert.match(S.mask(30, 'general'), /may not be necessary/); assert.match(S.mask(180, 'general'), /N95/); assert.match(S.mask(90, 'asthma'), /Optional/); });
+t('safety guardrails for children and indoor air',()=>{assert.match(S.mask(250,'child'),/Never mask children under 2/);assert.match(S.mask(250,'general'),/not gases/);assert.match(S.advice(350,'general').windows,/carbon monoxide/);assert.match(S.advice(160,'general').windows,/if safe/);});
 t('advice flags urgent + symptoms', () => { const a = S.advice(170, 'asthma'); assert.ok(a.urgent); assert.ok(a.symptoms); assert.equal(S.advice(20, 'general').symptoms, ''); });
 t('advice never throws on bad input', () => { assert.ok(S.advice(NaN, 'x').go); });
 t('best window', () => { const h = [90, 80, 40, 30, 70].map((a, i) => ({ time: '2026-11-19T0' + i + ':00', aqi: a })); const w = S.bestWindow(h, 2); assert.equal(w.index, 2); assert.equal(w.avg, 35); assert.equal(S.bestWindow([], 2), null); });
