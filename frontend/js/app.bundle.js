@@ -375,16 +375,22 @@ $('clearfeedback').onclick=()=>{if(!store.set('svasa_feedback',[])){$('feedbacks
  function save(){if(!store.set(key,state))$('notificationstatus').textContent='History cannot be saved on this device.';paint();}
  function add(entry){if(!valid(entry)||entry.at<=state.clearedAt||state.items.some(x=>x.id===entry.id))return false;state.items=[{...entry,title:entry.title.slice(0,100),body:entry.body.slice(0,240),read:false},...state.items].filter(valid).sort((a,b)=>b.at-a.at).slice(0,50);save();return true;}
  function emit(title,body,view='today'){const now=Date.now();if(state.items.some(x=>x.title===title&&x.body===body&&now-x.at<30000))return;add({id:crypto.randomUUID(),title,body,view,at:now});}
- async function sync(){if(!('caches'in root))return;try{if(!await caches.has(cacheName))return;const cache=await caches.open(cacheName);const keys=(await cache.keys()).slice(-50);for(const k of keys){const response=await cache.match(k);if(!response)continue;const entry=await response.json();if(add(entry)&&entry.title==='Svasa · Test notification'){ $('pushreceived').hidden=false;$('pushstatus').textContent='The browser displayed a test notification. Confirm only if you saw it.';}}}catch(_){}}
- $('notificationbell').onclick=()=>{dialog.showModal();$('notificationbell').setAttribute('aria-expanded','true');paint();sync();};
- $('notificationclose').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{$('notificationbell').setAttribute('aria-expanded','false');$('notificationbell').focus();});dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
+ function receive(entry){if(add(entry)&&entry.title==='Svasa · Test notification'){ $('pushreceived').hidden=false;$('pushstatus').textContent='The browser displayed a test notification. Confirm only if you saw it.';}}
+ let syncPending=null;
+ function sync(){if(syncPending)return syncPending;syncPending=(async()=>{
+  // Recover an actual notification even if cache persistence or the tab message failed.
+  try{if('serviceWorker'in navigator){const reg=await navigator.serviceWorker.getRegistration();if(reg?.active)for(const n of await reg.getNotifications({tag:'svasa-background'})){if(n.data)receive(n.data);}}}catch(_){}
+  try{if('caches'in root&&await caches.has(cacheName)){const cache=await caches.open(cacheName);for(const k of (await cache.keys()).slice(-30)){try{const response=await cache.match(k);if(response)receive(await response.json());}catch(_){}}}}catch(_){}
+ })().finally(()=>{syncPending=null;});return syncPending;}
+ let inboxTimer=null;$('notificationbell').onclick=()=>{dialog.showModal();$('notificationbell').setAttribute('aria-expanded','true');paint();sync();clearInterval(inboxTimer);inboxTimer=setInterval(sync,1000);};
+ $('notificationclose').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{clearInterval(inboxTimer);inboxTimer=null;$('notificationbell').setAttribute('aria-expanded','false');$('notificationbell').focus();});dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
  $('notificationread').onclick=()=>{state.items=state.items.map(x=>({...x,read:true}));save();};
  $('notificationclear').onclick=()=>{state={items:[],clearedAt:Date.now()};save();};
  $('notificationlist').onclick=e=>{const b=e.target.closest('button[data-id]'),x=b&&state.items.find(v=>v.id===b.dataset.id);if(!x)return;x.read=true;save();dialog.close();show(x.view);};
  $('notificationsettings').onclick=()=>{dialog.close();show('today');$('notif').scrollIntoView({block:'center'});$('notif').focus();};
  root.addEventListener('storage',e=>{if(e.key===key){state=read();paint();}});
  root.addEventListener('focus',sync);document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync();});
- if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-inbox-update')sync();});
+ if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-inbox-update'){receive(e.data.entry);sync();}});
  paint();sync();return {emit,sync};
 }};})(window);
 
