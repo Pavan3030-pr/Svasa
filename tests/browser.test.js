@@ -49,7 +49,7 @@ async function stub(page){
     assert.deepEqual(errors,[],'Uncaught browser errors');await context.close();
     const offline=await browser.newContext({serviceWorkers:'block'}),p=await offline.newPage();await p.route('https://air-quality-api.open-meteo.com/**',r=>r.abort());await p.route('https://api.open-meteo.com/**',r=>r.abort());await p.goto(origin+'/app.html');await p.waitForFunction(()=>document.querySelector('#hero').textContent.includes('Sample data'));assert.ok((await p.locator('#adv').textContent()).includes('Data unavailable'));await p.locator('[data-view="plan"]').click();assert.equal(await p.locator('#optimizeday').isDisabled(),true);await offline.close();
     const corrupt=await browser.newContext({serviceWorkers:'block'}),bad=await corrupt.newPage(),badErrors=[];bad.on('pageerror',e=>badErrors.push(e.message));
-    await bad.addInitScript(()=>{localStorage.setItem('svasa_snap_v2_28.6139,77.2090',JSON.stringify({at:Date.now(),data:{current:{us_aqi:112,time:'invalid'}}}));});
+    await bad.addInitScript(()=>{localStorage.setItem('svasa_recent',JSON.stringify({bad:true}));localStorage.setItem('svasa_snap_v2_28.6139,77.2090',JSON.stringify({at:Date.now(),data:{current:{us_aqi:112,time:'invalid'}}}));});
     await bad.route('https://air-quality-api.open-meteo.com/**',r=>r.abort());await bad.route('https://api.open-meteo.com/**',r=>r.abort());await bad.goto(origin+'/app.html');
     await bad.waitForFunction(()=>document.querySelector('#hero').textContent.includes('Sample data'));assert.equal(await bad.locator('#goplan').isDisabled(),true);assert.deepEqual(badErrors,[]);await corrupt.close();
     console.log('Corrupt snapshot recovery and stale planning protection passed.');

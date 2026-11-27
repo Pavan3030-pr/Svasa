@@ -112,7 +112,7 @@ function drawChart(h, win) {
   const grid = [50, 100, 150, 200, 300].filter(v => v <= max).map(v => `<line x1="${L}" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e4e8eb"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`).join('');
   const bars = h.map((x, i) => {
     const known = S.band(x.aqi), v = known ? x.aqi : 0, bb = known || {color:'#a3afa8'}, inw = win && i >= win.index && i < win.index + 2, cx = L + i * 26 + 14, y = Y(v);
-    return `<g data-i="${i}"><rect x="${L + i * 26 + 4}" y="${y}" width="20" height="${Math.max(2, base - y)}" rx="5" fill="${bb.color}"${inw ? ' stroke="#0f1f23" stroke-width="2.5"' : ''}/><text class="v" x="${cx}" y="${y - 4}" text-anchor="middle">${known ? Math.round(v) : '—'}</text>${i % 3 === 0 ? `<text x="${cx}" y="${H - 10}" text-anchor="middle">${x.time.slice(11, 13)}h</text>` : ''}</g>`;
+    return `<g data-i="${i}"><rect x="${L + i * 26 + 4}" y="${y}" width="20" height="${Math.max(2, base - y)}" rx="5" fill="${bb.color}"${inw ? ' stroke="#0f1f23" stroke-width="2.5"' : ''}/><text class="v" x="${cx}" y="${y - 4}" text-anchor="middle">${known ? Math.round(v) : '—'}</text>${i % 3 === 0 ? `<text x="${cx}" y="${H - 10}" text-anchor="middle">${esc(x.time.slice(11, 13))}h</text>` : ''}</g>`;
   }).join('');
   $('chart').innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Hourly AQI for the next 24 hours with values. Outlined bars mark the cleanest window.">${grid}${bars}</svg>` + legend();
 }
@@ -131,7 +131,7 @@ function drawHistory(c,data) {
   const max = Math.max(150, ...days.map(x => x.avg));
   $('hist').innerHTML = `<svg width="${Math.max(480, days.length * 64)}" height="170" role="img" aria-label="Daily average AQI">` + days.map((d, i) => {
     const bh = Math.max(3, d.avg / max * 110), bb = S.band(d.avg);
-    return `<g><title>${d.date} AQI ${d.avg}</title><rect x="${i * 64 + 8}" y="${130 - bh}" width="46" height="${bh}" rx="6" fill="${bb.color}"/><text x="${i * 64 + 31}" y="${124 - bh}" text-anchor="middle">${d.avg}</text><text x="${i * 64 + 31}" y="150" text-anchor="middle">${esc(d.date.slice(5))}</text></g>`;
+    return `<g><title>${esc(d.date)} AQI ${d.avg}</title><rect x="${i * 64 + 8}" y="${130 - bh}" width="46" height="${bh}" rx="6" fill="${bb.color}"/><text x="${i * 64 + 31}" y="${124 - bh}" text-anchor="middle">${d.avg}</text><text x="${i * 64 + 31}" y="150" text-anchor="middle">${esc(d.date.slice(5))}</text></g>`;
   }).join('') + '</svg>' + legend();
 }
 
@@ -202,12 +202,13 @@ $('pop').onclick = e => {
   if (b.dataset.p === 'all') cmp = POP.map(mk); else { const c = mk(POP[+b.dataset.p]); if (!cmp.some(x => x.name === c.name)) cmp = cmp.slice(-5).concat([c]); }
   store.set('svasa_cmp', cmp); drawCities();
 };
+function recentPlaces(){const v=store.get('svasa_recent',[]);return Array.isArray(v)?v.filter(x=>x&&typeof x.name==='string'&&Number.isFinite(x.lat)&&Number.isFinite(x.lon)&&Math.abs(x.lat)<=90&&Math.abs(x.lon)<=180).slice(0,5):[];}
 function pushRecent(p) {
   if (!p || p.name === 'Your location') return;
-  const r = store.get('svasa_recent', []).filter(x => x.name !== p.name); r.unshift({ name: p.name, lat: p.lat, lon: p.lon }); store.set('svasa_recent', r.slice(0, 5));
+  const r = recentPlaces().filter(x => x.name !== p.name); r.unshift({ name: p.name, lat: p.lat, lon: p.lon }); store.set('svasa_recent', r.slice(0, 5));
 }
 function showRecent() {
-  const r = store.get('svasa_recent', []), s = $('sugg'); if (!r.length || $('q').value) return;
+  const r = recentPlaces(), s = $('sugg'); if (!r.length || $('q').value) return;
   s.innerHTML = '<div class="sugghead">Recent</div>' + r.map((x, i) => `<button type="button" data-i="${i}">${esc(x.name)}</button>`).join(''); s.hidden = false;
   s.onclick = e => { const b = e.target.closest('button'); if (b) { s.hidden = true; load(r[b.dataset.i]); show('today'); } };
 }
@@ -241,7 +242,7 @@ function pushMsg(role, text, cls) {
   $('log').appendChild(m); $('log').scrollTop = $('log').scrollHeight; return m;
 }
 async function viaServer(q) {
-  const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q, place:{lat:st.place.lat,lon:st.place.lon},ctx:{profile:st.profile,lang:st.lang,hist:st.hist} }) });
+  const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal:AbortSignal.timeout(22000),body: JSON.stringify({ q, place:{lat:st.place.lat,lon:st.place.lon},ctx:{profile:st.profile,lang:st.lang,hist:st.hist} }) });
   if (!r.ok) throw new Error('server ' + r.status);
   return await r.json();
 }
@@ -270,14 +271,16 @@ function notifyCheck(aqi) {
 }
 
 /* ---------- search ---------- */
+let suggestSequence=0;
 async function suggest(v) {
-  v = S.cleanQuery(v); const s = $('sugg'); if (v.length < 2) { s.hidden = true; return; }
+  const seq=++suggestSequence;v = S.cleanQuery(v); const s = $('sugg'); if (v.length < 2) { s.hidden = true; return; }
   try {
     const res = (await jget(`${GEO}?count=5&language=en&name=${encodeURIComponent(v)}`)).results || [];
+    if(seq!==suggestSequence||S.cleanQuery($('q').value)!==v)return;
     s.hidden = !res.length;
     s.innerHTML = res.map((x, i) => `<button type="button" data-i="${i}">${esc(x.name)}${x.admin1 ? ', ' + esc(x.admin1) : ''}, ${esc(x.country || '')}</button>`).join('');
     s.onclick = e => { const b = e.target.closest('button'); if (b) pick(res[b.dataset.i]); };
-  } catch (_) { s.hidden = true; }
+  } catch (_) { if(seq===suggestSequence&&S.cleanQuery($('q').value)===v)s.hidden = true; }
 }
 function pick(x) { $('sugg').hidden = true; $('q').value = ''; load({ name: x.name + (x.country ? ', ' + x.country : ''), lat: x.latitude, lon: x.longitude }); show('today'); }
 
