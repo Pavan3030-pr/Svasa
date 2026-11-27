@@ -1,0 +1,26 @@
+name: SVASA production smoke
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['backend/**', 'api/**', 'frontend/**', 'tests/production-smoke.js', '.github/workflows/production.yml']
+permissions:
+  contents: read
+jobs:
+  production:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Verify deployed public endpoints and configured providers
+        run: node tests/production-smoke.js
+      - name: Upload production evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: svasa-production-smoke
+          path: production-artifacts/
+          if-no-files-found: ignore
