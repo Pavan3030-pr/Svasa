@@ -14,3 +14,6 @@ Record actual task completion, time and obstacles with consent. Exported respons
 
 ## Status
 No independent participants have been evaluated yet. Automated browser checks use synthetic inputs and are not real-user feedback. No physical notification receipt is claimed until confirmed by a participant.
+
+### Notification validation boundary
+The automated production-browser suite exercises the deployed service worker with a Chromium-simulated push, checks the browser notification object and receipt prompt, and closes the test notification without clicking human confirmation. For end-to-end transport, a consenting user on a physical device must enable background alerts, permit notifications, send a test and confirm only after seeing it. Record browser/OS, result and date; unsubscribe after testing if desired.
