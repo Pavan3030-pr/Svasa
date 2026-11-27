@@ -373,6 +373,13 @@ function capture(items,plan,hours,cityKey,profile,policy){
  if(!plan||!Array.isArray(items)||!Array.isArray(hours)||!items.every(x=>hours[x.preferred]&&iso(hours[x.preferred].time)))return null;
  return {cityKey,profile,policy,items:items.map((a,i)=>({name:a.name,duration:a.duration,flex:a.flex,preferredTime:hours[a.preferred].time,chosenTime:plan.slots[i].start})),exposure:plan.exposure,risk:plan.risk};
 }
+// Storage is untrusted. Bound the shape and lifespan before restoring any draft.
+function restore(snapshot,S,cityKey,profile,now=Date.now()){
+ if(!snapshot||snapshot.version!==1||snapshot.cityKey!==cityKey||snapshot.profile!==profile||!Object.hasOwn(S.PROFILES,profile)||!['exposure','routine'].includes(snapshot.policy)||!Number.isFinite(snapshot.savedAt)||snapshot.savedAt>now+60000||now-snapshot.savedAt>48*3600000||!Array.isArray(snapshot.items)||snapshot.items.length<1||snapshot.items.length>4||!valid(snapshot.exposure)||!Number.isInteger(snapshot.risk)||snapshot.risk<0||snapshot.risk>snapshot.items.length)return null;
+ const names=['Commute','Walk','Workout','School','Shopping','Other'];
+ if(!snapshot.items.every(a=>a&&names.includes(a.name)&&Number.isInteger(a.duration)&&a.duration>=1&&a.duration<=4&&[0,1,2,4,6].includes(a.flex)&&iso(a.preferredTime)&&iso(a.chosenTime)&&Math.abs(Date.parse(a.preferredTime+'Z')-Date.parse(a.chosenTime+'Z'))<=a.flex*3600000))return null;
+ return {cityKey,profile,policy:snapshot.policy,items:snapshot.items.map(a=>({name:a.name,duration:a.duration,flex:a.flex,preferredTime:a.preferredTime,chosenTime:a.chosenTime})),exposure:snapshot.exposure,risk:snapshot.risk};
+}
 function revise(snapshot,hours,S,cityKey,profile){
  if(!snapshot||snapshot.cityKey!==cityKey||snapshot.profile!==profile)return {state:'different-context'};
  if(!Array.isArray(hours)||!hours.length)return {state:'unavailable'};
@@ -396,7 +403,11 @@ function familyWindow(hours,members,S){
 function ledger(entries){const a=Array.isArray(entries)?entries.filter(x=>x&&valid(x.exposure)):[];return {saved:a.length,completed:a.filter(x=>x.completed===true).length,lower:a.filter(x=>valid(x.baseline)&&x.baseline>x.exposure).length,completedLower:a.filter(x=>x.completed===true&&valid(x.baseline)&&x.baseline>x.exposure).length};}
 function verifyText(value,ctx,S){
  if(!value||value.kind!=='air')return true;
- const t=[value.recommendation,value.reason,value.limitation].join('\n'),recommendation=value.recommendation||'';
+ const digits=s=>String(s).replace(/[\u0966-\u096f\u0c66-\u0c6f\u0be6-\u0bef\u09e6-\u09ef]/g,x=>String(x.charCodeAt(0)%16-6));
+ const t=digits([value.recommendation,value.reason,value.limitation].join('\n')),recommendation=digits(value.recommendation||'');
+ if(/(?:पूरी तरह सुरक्षित|बिल्कुल सुरक्षित|कोई जोखिम नहीं|పూర్తిగా సురక్షితం|ఎలాంటి ప్రమాదం లేదు|முற்றிலும் பாதுகாப்பானது|எந்த ஆபத்தும் இல்லை|সম্পূর্ণ নিরাপদ|কোনো ঝুঁকি নেই)/u.test(t))return false;
+ const allowedAQI=new Set([Math.round(ctx.aqi),ctx.window?.avg].filter(Number.isFinite));
+ for(const m of t.matchAll(/\bAQI\s*(?:is\s*|[:=]\s*)?(\d{1,4})\b/gi))if(!allowedAQI.has(Number(m[1])))return false;
  if(/\b(?:guaranteed safe|zero risk|no risk|risk.free|100\s*%\s*safe)\b/i.test(t))return false;
  for(const m of t.matchAll(/\bPM\s*2\.5\s*(?:concentration\s*)?(?:is\s*|of\s*|[:=]\s*)?(\d+(?:\.\d+)?)\s*(?:µg|μg|ug|micrograms?)/gi))if(!valid(ctx.pm25)||Math.abs(Number(m[1])-ctx.pm25)>.51)return false;
  const permitted=new Set([ctx.window?.start?.slice(11,16),ctx.window?.end?.slice(11,16)].filter(Boolean));
@@ -404,12 +415,12 @@ function verifyText(value,ctx,S){
  if(S.effectiveLevel(ctx.aqi,ctx.profile)>=2&&/(?:^|[.!?]\s+)(?:go (?:for a )?|do |try |continue )?(?:run(?:ning)?|jog(?:ging)?|strenuous exercise|intense exercise) (?:outdoors|outside)\b/i.test(recommendation))return false;
  return true;
 }
-return {slot,compare,trust,capture,revise,familyWindow,ledger,verifyText};
+return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText};
 });
 
 ;
 /* Reports and local usability data; no network requests. */
-(function(root){'use strict';root.SvasaReports={init({$,store,esc,forecast,getPlan,invalidatePlan,show,banner,notify}){
+(function(root){'use strict';root.SvasaReports={init({$,store,esc,forecast,getPlan,invalidatePlan,onSaved,show,banner,notify}){
 let reports=store.get('svasa_reports',[]);
 if(!Array.isArray(reports))reports=[];
 function recentReports(){const now=Date.now(),cutoff=now-7*86400000;return reports.filter(x=>x&&Date.parse(x.createdAt)>=cutoff&&Date.parse(x.createdAt)<=now+60000&&Number.isFinite(x.exposure)&&x.exposure>=0&&typeof x.city==='string').slice(0,100);}
@@ -422,7 +433,7 @@ function renderReports(){
   el.onclick=e=>{const b=e.target.closest('[data-complete]');if(!b)return;const x=entries[Number(b.dataset.complete)];if(!x)return;const updated={...x,completed:x.completed!==true,completedAt:x.completed===true?null:new Date().toISOString()};const next=reports.map(r=>r===x?updated:r);if(!store.set('svasa_reports',next)){banner('Could not update completion on this device.');return;}reports=next;renderReports();};
   $('exportreport').disabled=!entries.length;$('clearreport').disabled=!reports.length;
 }
-$('saveplan').onclick=()=>{const plan=getPlan();if(!plan||!forecast().length)return;const next=[plan,...recentReports()].slice(0,100);if(!store.set('svasa_reports',next)){banner('Device storage unavailable. Your schedule was not saved.');return;}reports=next;invalidatePlan();renderReports();notify('Schedule saved','Your projected schedule is available in Reports.','reports');show('reports');};
+$('saveplan').onclick=()=>{const plan=getPlan();if(!plan||!forecast().length)return;const next=[plan,...recentReports()].slice(0,100);if(!store.set('svasa_reports',next)){banner('Device storage unavailable. Your schedule was not saved.');return;}reports=next;onSaved?.();invalidatePlan();renderReports();notify('Schedule saved','Your projected schedule is available in Reports.','reports');show('reports');};
 $('clearreport').onclick=()=>{if(!store.set('svasa_reports',[])){banner('Could not clear saved plans. Check browser storage.');return;}reports=[];renderReports();};
 $('exportreport').onclick=()=>{const data={method:'Projected outdoor PM2.5 concentration × hours; not actual exposure or inhaled dose',plans:recentReports()};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-projected-plans.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 renderReports();
@@ -594,7 +605,8 @@ async function load(p) {
   if (seq !== loadSequence) return;
   store.set('svasa_last', { p, profile: st.profile });
   $('v-today').classList.remove('loading');
-  if(priorTimes&&forecast().length){const newHours=forecast();activities.forEach((a,i)=>{a.preferred=priorTimes[i]?newHours.findIndex(h=>h.time===priorTimes[i]):-1;});}
+  if(priorTimes&&forecast().length){const newHours=forecast();activities.forEach((a,i)=>{a.preferred=priorTimes[i]?newHours.findIndex(h=>h.time===priorTimes[i]):-1;});draftTimes=priorTimes;}
+  if(!sameCity){reviewSnapshot=I.restore(store.get(reviewKey,null),S,cityKey(),st.profile);if(reviewSnapshot){const hrs=forecast();activities=reviewSnapshot.items.map(a=>({name:a.name,duration:a.duration,flex:a.flex,preferred:hrs.findIndex(h=>h.time===a.preferredTime)}));draftTimes=reviewSnapshot.items.map(a=>a.preferredTime);}}
   render();$('refreshair').disabled=false;$('refreshair').querySelector('span').textContent='Refresh air';loadStation();
   if(location.hash==='#cities')drawCities();
   const w=await jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`,5000).then(x=>x.current).catch(()=>null);
@@ -889,7 +901,7 @@ function show(v) {
   if(v==='cities')drawCities();
   if(v==='family')renderFamily();
   if(v==='ask')refreshAIMode();
-  if(v==='plan'){renderActivityTimes();renderReview();}
+  if(v==='plan'){if(!currentPlan)renderActivityTimes();renderReview();}
   window.scrollTo(0, 0);
 }
 
@@ -955,6 +967,9 @@ let currentPlan=null,decisionPlans=null;
 
 const I=window.SvasaIntelligence;
 let reviewSnapshot=null,latestStation=null,draftTimes=null;
+const reviewKey='svasa_adaptive_plan_v1';
+function persistReview(){if(reviewSnapshot&&!store.set(reviewKey,{...reviewSnapshot,version:1,savedAt:Date.now()}))banner('Schedule saved, but adaptive review could not be stored.');}
+function forgetReview(){if(!store.set(reviewKey,null)){banner('Could not remove the saved adaptive plan.');return;}clearReview();$('forgetadaptive').hidden=true;$('dayresult').textContent='Saved adaptive plan removed from this browser.';}
 const cityKey=()=>st.place?st.place.lat+','+st.place.lon:'';
 const metric=v=>Number.isFinite(v)?v.toFixed(1)+' µg·h/m³':'Unavailable';
 const fmtTime=t=>t?t.replace('T',' '):'Unavailable';
@@ -962,13 +977,20 @@ function renderTrust(){
  const el=$('airtrust'),r=I.trust({fresh:!!st.data&&!st.demo&&!st.stale,model:st.data?.current?.pm2_5,station:latestStation,hours:forecast()});
  el.innerHTML='<p class="section-kicker">AIRTRUST / EVIDENCE QUALITY</p><h3>'+esc(r.label)+'</h3><div class="decisionbaseline"><div><small>Usable forecast hours</small><strong>'+r.coverage+' / 24</strong></div><div><small>Model PM2.5</small><strong>'+esc(r.model===null?'Unavailable':r.model.toFixed(1)+' µg/m³')+'</strong></div><div><small>Comparable station PM2.5</small><strong>'+esc(r.station===null?'Unavailable':r.station.toFixed(1)+' µg/m³')+'</strong></div></div><p class="muted">'+esc(r.detail)+'</p>';
 }
+function futureMeters(r){
+ if(!Number.isFinite(r.baseline)||!Number.isFinite(r.optimized))return '';
+ const max=Math.max(1,r.baseline,r.optimized);
+ return '<div class="scheduleitem"><label for="futurebefore">Preferred routine · '+esc(metric(r.baseline))+'</label><meter id="futurebefore" min="0" max="'+max+'" value="'+r.baseline+'" style="width:100%;height:18px"></meter><label for="futureafter">Optimized routine · '+esc(metric(r.optimized))+'</label><meter id="futureafter" min="0" max="'+max+'" value="'+r.optimized+'" style="width:100%;height:18px"></meter></div>';
+}
 function renderFutures(items,plan){
  const el=$('parallelfutures'),r=I.compare(forecast(),items,plan,S,st.profile);el.hidden=!r;if(!r)return;
- el.innerHTML='<p class="section-kicker">PARALLEL FUTURES / SAME ACTIVITIES, TWO OUTCOMES</p><h3>Your routine vs optimized routine</h3><div class="decisionbaseline"><div><small>Preferred routine</small><strong>'+esc(metric(r.baseline))+'</strong></div><div><small>Optimized routine</small><strong>'+esc(metric(r.optimized))+'</strong></div><div><small>Projected change</small><strong>'+esc(r.pct===null?'Unavailable':Math.abs(r.pct).toFixed(1)+'% '+(r.pct>=0?'lower':'higher'))+'</strong></div></div>'+r.rows.map(x=>'<div class="scheduleitem"><strong>'+esc(x.name)+(x.fixed?' · Fixed':'')+'</strong><span>Original: '+esc(fmtTime(x.before?.start))+' · '+esc(metric(x.before?.exposure))+'</span><span>Optimized: '+esc(fmtTime(x.after.start))+' · '+esc(metric(x.after.exposure))+'</span><small>'+ (x.after.caution?'Consider an indoor alternative.':'Lower concern, not risk-free.')+'</small></div>').join('')+'<p class="foot">Same activity durations; outdoor PM2.5 concentration × hours. Not inhaled dose or measured exposure. An overlapping or incomplete baseline is not compared.</p>';
+ el.innerHTML='<p class="section-kicker">PARALLEL FUTURES / SAME ACTIVITIES, TWO OUTCOMES</p><h3>Your routine vs optimized routine</h3><div class="decisionbaseline"><div><small>Preferred routine</small><strong>'+esc(metric(r.baseline))+'</strong></div><div><small>Optimized routine</small><strong>'+esc(metric(r.optimized))+'</strong></div><div><small>Projected change</small><strong>'+esc(r.pct===null?'Unavailable':Math.abs(r.pct).toFixed(1)+'% '+(r.pct>=0?'lower':'higher'))+'</strong></div></div>'+futureMeters(r)+r.rows.map(x=>'<div class="scheduleitem"><strong>'+esc(x.name)+(x.fixed?' · Fixed':'')+'</strong><span>Original: '+esc(fmtTime(x.before?.start))+' · '+esc(metric(x.before?.exposure))+'</span><span>Optimized: '+esc(fmtTime(x.after.start))+' · '+esc(metric(x.after.exposure))+'</span><small>'+ (x.after.caution?'Consider an indoor alternative.':'Lower concern, not risk-free.')+'</small></div>').join('')+'<p class="foot">Same activity durations; outdoor PM2.5 concentration × hours. Not inhaled dose or measured exposure. An overlapping or incomplete baseline is not compared.</p>';
 }
 function clearReview(){reviewSnapshot=null;$('adaptiveday').hidden=true;}
+$('forgetadaptive').onclick=forgetReview;
 function renderReview(){
- const el=$('adaptiveday');if(!reviewSnapshot){el.hidden=true;return;}
+ const el=$('adaptiveday'),saved=I.restore(store.get(reviewKey,null),S,cityKey(),st.profile);if(!reviewSnapshot){el.hidden=true;$('forgetadaptive').hidden=!saved;return;}
+ $('forgetadaptive').hidden=!saved;
  const r=I.revise(reviewSnapshot,forecast(),S,cityKey(),st.profile);if(r.state==='different-context'){clearReview();return;}el.hidden=false;
  const copy={unavailable:'Fresh data unavailable. No revised plan can be proposed.',expired:'A preferred time is outside the updated forecast. Review your activities manually.',infeasible:'No feasible schedule with complete data. Review your constraints.',changed:'A new proposal is available. Fixed commitments are preserved; review before accepting.',unchanged:'The previous proposal remains optimal under the selected priority.'};
  el.innerHTML='<p class="section-kicker">ADAPTIVE DAY / FORECAST REVIEW</p><h3>'+esc(r.state==='changed'?'Your forecast changed':'Review your schedule')+'</h3><p>'+esc(copy[r.state]||'')+'</p>'+(r.proposal?'<div class="decisionbaseline"><div><small>Previous proposal on new forecast</small><strong>'+esc(metric(r.prior))+'</strong></div><div><small>New proposal</small><strong>'+esc(metric(r.proposal.exposure))+'</strong></div></div><button type="button" class="btn ghost" id="reviewrevised">Review with latest forecast</button>':'');
@@ -995,10 +1017,10 @@ function renderActivityTimes(){
   }).join('');
   const best=S.bestWindow(hrs,2);$('planwindowhint').hidden=!best;$('planwindowtext').textContent=best?best.start.replace('T',' ')+' – '+best.end.replace('T',' ')+' · mean US AQI '+best.avg+'. Forecast, not a guarantee of safety.':'';
   $('addactivity').disabled=activities.length>=4;
-  $('optimizeday').disabled=!hrs.length||!activities.length;
+  $('optimizeday').disabled=!hrs.length||!activities.length||activities.some(a=>a.preferred<0||a.preferred+a.duration>hrs.length);
 }
 $('applywindow').onclick=()=>{clearReview();const best=S.bestWindow(forecast(),2);if(!best)return;if(!activities.length)activities.push({name:'Walk',duration:2,preferred:best.index,flex:0});else Object.assign(activities[0],{duration:2,preferred:best.index,flex:0});renderActivityTimes();$('dayresult').textContent='Suggested window applied to first activity. Optimize to check the complete schedule.';};
-$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;clearReview();activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);invalidatePlan();$('dayresult').textContent='Plan changed. Optimize again.';};
+$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;clearReview();activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);invalidatePlan();$('optimizeday').disabled=!forecast().length||!activities.length||activities.some(a=>a.preferred<0||a.preferred+a.duration>forecast().length);$('dayresult').textContent='Plan changed. Optimize again.';};
 $('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)return;clearReview();activities.splice(Number(b.dataset.remove),1);renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('addactivity').onclick=()=>{if(activities.length>=4)return;clearReview();activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('optimizeday').onclick=()=>{
@@ -1035,7 +1057,7 @@ $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderF
 
 inbox=window.SvasaInbox.init({$,store,show});
 alertsOn=!!store.get('svasa_device_alerts',false)&&'Notification'in window&&Notification.permission==='granted';if(alertsOn)$('notif').textContent='Disable device alerts while open';
-window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,show,banner,notify:(...args)=>inbox.emit(...args)});
+window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,onSaved:()=>{persistReview();renderReview();},show,banner,notify:(...args)=>inbox.emit(...args)});
 window.SvasaPushUI.init({$,store,st});
 
 /* ---------- boot ---------- */

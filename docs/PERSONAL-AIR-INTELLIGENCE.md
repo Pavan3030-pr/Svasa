@@ -2,7 +2,7 @@
 
 Parallel Futures compares preferred and optimized outdoor activity schedules using concentration × hours. Invalid or overlapping baselines are not compared. Fixed activities are preserved by the existing optimizer.
 
-Adaptive Day stores absolute city-local times for the current browser session and recalculates on a fresh forecast. A change is a proposal; the user reviews it before accepting. No automatic rescheduling or background persistence.
+Adaptive Day stores absolute city-local times for the current browser session and recalculates on a fresh forecast. A change is a proposal; the user reviews it before accepting. Saving a projected schedule opts into restoring one city/profile-specific adaptive plan for up to 48 hours on this browser. The user can forget it. No automatic rescheduling, background computation, or server persistence.
 
 AirTrust excludes stale/unknown-age or distant stations and flags substantial discrepancies (absolute ≥15 µg/m³ AND relative ≥40% of the larger reading). This heuristic is not calibrated confidence; model and station may represent different averaging periods and locations.
 

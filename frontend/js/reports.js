@@ -1,5 +1,5 @@
 /* Reports and local usability data; no network requests. */
-(function(root){'use strict';root.SvasaReports={init({$,store,esc,forecast,getPlan,invalidatePlan,show,banner,notify}){
+(function(root){'use strict';root.SvasaReports={init({$,store,esc,forecast,getPlan,invalidatePlan,onSaved,show,banner,notify}){
 let reports=store.get('svasa_reports',[]);
 if(!Array.isArray(reports))reports=[];
 function recentReports(){const now=Date.now(),cutoff=now-7*86400000;return reports.filter(x=>x&&Date.parse(x.createdAt)>=cutoff&&Date.parse(x.createdAt)<=now+60000&&Number.isFinite(x.exposure)&&x.exposure>=0&&typeof x.city==='string').slice(0,100);}
@@ -12,7 +12,7 @@ function renderReports(){
   el.onclick=e=>{const b=e.target.closest('[data-complete]');if(!b)return;const x=entries[Number(b.dataset.complete)];if(!x)return;const updated={...x,completed:x.completed!==true,completedAt:x.completed===true?null:new Date().toISOString()};const next=reports.map(r=>r===x?updated:r);if(!store.set('svasa_reports',next)){banner('Could not update completion on this device.');return;}reports=next;renderReports();};
   $('exportreport').disabled=!entries.length;$('clearreport').disabled=!reports.length;
 }
-$('saveplan').onclick=()=>{const plan=getPlan();if(!plan||!forecast().length)return;const next=[plan,...recentReports()].slice(0,100);if(!store.set('svasa_reports',next)){banner('Device storage unavailable. Your schedule was not saved.');return;}reports=next;invalidatePlan();renderReports();notify('Schedule saved','Your projected schedule is available in Reports.','reports');show('reports');};
+$('saveplan').onclick=()=>{const plan=getPlan();if(!plan||!forecast().length)return;const next=[plan,...recentReports()].slice(0,100);if(!store.set('svasa_reports',next)){banner('Device storage unavailable. Your schedule was not saved.');return;}reports=next;onSaved?.();invalidatePlan();renderReports();notify('Schedule saved','Your projected schedule is available in Reports.','reports');show('reports');};
 $('clearreport').onclick=()=>{if(!store.set('svasa_reports',[])){banner('Could not clear saved plans. Check browser storage.');return;}reports=[];renderReports();};
 $('exportreport').onclick=()=>{const data={method:'Projected outdoor PM2.5 concentration × hours; not actual exposure or inhaled dose',plans:recentReports()};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-projected-plans.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 renderReports();

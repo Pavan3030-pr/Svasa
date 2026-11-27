@@ -62,7 +62,8 @@ async function load(p) {
   if (seq !== loadSequence) return;
   store.set('svasa_last', { p, profile: st.profile });
   $('v-today').classList.remove('loading');
-  if(priorTimes&&forecast().length){const newHours=forecast();activities.forEach((a,i)=>{a.preferred=priorTimes[i]?newHours.findIndex(h=>h.time===priorTimes[i]):-1;});}
+  if(priorTimes&&forecast().length){const newHours=forecast();activities.forEach((a,i)=>{a.preferred=priorTimes[i]?newHours.findIndex(h=>h.time===priorTimes[i]):-1;});draftTimes=priorTimes;}
+  if(!sameCity){reviewSnapshot=I.restore(store.get(reviewKey,null),S,cityKey(),st.profile);if(reviewSnapshot){const hrs=forecast();activities=reviewSnapshot.items.map(a=>({name:a.name,duration:a.duration,flex:a.flex,preferred:hrs.findIndex(h=>h.time===a.preferredTime)}));draftTimes=reviewSnapshot.items.map(a=>a.preferredTime);}}
   render();$('refreshair').disabled=false;$('refreshair').querySelector('span').textContent='Refresh air';loadStation();
   if(location.hash==='#cities')drawCities();
   const w=await jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`,5000).then(x=>x.current).catch(()=>null);
@@ -357,7 +358,7 @@ function show(v) {
   if(v==='cities')drawCities();
   if(v==='family')renderFamily();
   if(v==='ask')refreshAIMode();
-  if(v==='plan'){renderActivityTimes();renderReview();}
+  if(v==='plan'){if(!currentPlan)renderActivityTimes();renderReview();}
   window.scrollTo(0, 0);
 }
 
@@ -423,6 +424,9 @@ let currentPlan=null,decisionPlans=null;
 
 const I=window.SvasaIntelligence;
 let reviewSnapshot=null,latestStation=null,draftTimes=null;
+const reviewKey='svasa_adaptive_plan_v1';
+function persistReview(){if(reviewSnapshot&&!store.set(reviewKey,{...reviewSnapshot,version:1,savedAt:Date.now()}))banner('Schedule saved, but adaptive review could not be stored.');}
+function forgetReview(){if(!store.set(reviewKey,null)){banner('Could not remove the saved adaptive plan.');return;}clearReview();$('forgetadaptive').hidden=true;$('dayresult').textContent='Saved adaptive plan removed from this browser.';}
 const cityKey=()=>st.place?st.place.lat+','+st.place.lon:'';
 const metric=v=>Number.isFinite(v)?v.toFixed(1)+' µg·h/m³':'Unavailable';
 const fmtTime=t=>t?t.replace('T',' '):'Unavailable';
@@ -430,13 +434,20 @@ function renderTrust(){
  const el=$('airtrust'),r=I.trust({fresh:!!st.data&&!st.demo&&!st.stale,model:st.data?.current?.pm2_5,station:latestStation,hours:forecast()});
  el.innerHTML='<p class="section-kicker">AIRTRUST / EVIDENCE QUALITY</p><h3>'+esc(r.label)+'</h3><div class="decisionbaseline"><div><small>Usable forecast hours</small><strong>'+r.coverage+' / 24</strong></div><div><small>Model PM2.5</small><strong>'+esc(r.model===null?'Unavailable':r.model.toFixed(1)+' µg/m³')+'</strong></div><div><small>Comparable station PM2.5</small><strong>'+esc(r.station===null?'Unavailable':r.station.toFixed(1)+' µg/m³')+'</strong></div></div><p class="muted">'+esc(r.detail)+'</p>';
 }
+function futureMeters(r){
+ if(!Number.isFinite(r.baseline)||!Number.isFinite(r.optimized))return '';
+ const max=Math.max(1,r.baseline,r.optimized);
+ return '<div class="scheduleitem"><label for="futurebefore">Preferred routine · '+esc(metric(r.baseline))+'</label><meter id="futurebefore" min="0" max="'+max+'" value="'+r.baseline+'" style="width:100%;height:18px"></meter><label for="futureafter">Optimized routine · '+esc(metric(r.optimized))+'</label><meter id="futureafter" min="0" max="'+max+'" value="'+r.optimized+'" style="width:100%;height:18px"></meter></div>';
+}
 function renderFutures(items,plan){
  const el=$('parallelfutures'),r=I.compare(forecast(),items,plan,S,st.profile);el.hidden=!r;if(!r)return;
- el.innerHTML='<p class="section-kicker">PARALLEL FUTURES / SAME ACTIVITIES, TWO OUTCOMES</p><h3>Your routine vs optimized routine</h3><div class="decisionbaseline"><div><small>Preferred routine</small><strong>'+esc(metric(r.baseline))+'</strong></div><div><small>Optimized routine</small><strong>'+esc(metric(r.optimized))+'</strong></div><div><small>Projected change</small><strong>'+esc(r.pct===null?'Unavailable':Math.abs(r.pct).toFixed(1)+'% '+(r.pct>=0?'lower':'higher'))+'</strong></div></div>'+r.rows.map(x=>'<div class="scheduleitem"><strong>'+esc(x.name)+(x.fixed?' · Fixed':'')+'</strong><span>Original: '+esc(fmtTime(x.before?.start))+' · '+esc(metric(x.before?.exposure))+'</span><span>Optimized: '+esc(fmtTime(x.after.start))+' · '+esc(metric(x.after.exposure))+'</span><small>'+ (x.after.caution?'Consider an indoor alternative.':'Lower concern, not risk-free.')+'</small></div>').join('')+'<p class="foot">Same activity durations; outdoor PM2.5 concentration × hours. Not inhaled dose or measured exposure. An overlapping or incomplete baseline is not compared.</p>';
+ el.innerHTML='<p class="section-kicker">PARALLEL FUTURES / SAME ACTIVITIES, TWO OUTCOMES</p><h3>Your routine vs optimized routine</h3><div class="decisionbaseline"><div><small>Preferred routine</small><strong>'+esc(metric(r.baseline))+'</strong></div><div><small>Optimized routine</small><strong>'+esc(metric(r.optimized))+'</strong></div><div><small>Projected change</small><strong>'+esc(r.pct===null?'Unavailable':Math.abs(r.pct).toFixed(1)+'% '+(r.pct>=0?'lower':'higher'))+'</strong></div></div>'+futureMeters(r)+r.rows.map(x=>'<div class="scheduleitem"><strong>'+esc(x.name)+(x.fixed?' · Fixed':'')+'</strong><span>Original: '+esc(fmtTime(x.before?.start))+' · '+esc(metric(x.before?.exposure))+'</span><span>Optimized: '+esc(fmtTime(x.after.start))+' · '+esc(metric(x.after.exposure))+'</span><small>'+ (x.after.caution?'Consider an indoor alternative.':'Lower concern, not risk-free.')+'</small></div>').join('')+'<p class="foot">Same activity durations; outdoor PM2.5 concentration × hours. Not inhaled dose or measured exposure. An overlapping or incomplete baseline is not compared.</p>';
 }
 function clearReview(){reviewSnapshot=null;$('adaptiveday').hidden=true;}
+$('forgetadaptive').onclick=forgetReview;
 function renderReview(){
- const el=$('adaptiveday');if(!reviewSnapshot){el.hidden=true;return;}
+ const el=$('adaptiveday'),saved=I.restore(store.get(reviewKey,null),S,cityKey(),st.profile);if(!reviewSnapshot){el.hidden=true;$('forgetadaptive').hidden=!saved;return;}
+ $('forgetadaptive').hidden=!saved;
  const r=I.revise(reviewSnapshot,forecast(),S,cityKey(),st.profile);if(r.state==='different-context'){clearReview();return;}el.hidden=false;
  const copy={unavailable:'Fresh data unavailable. No revised plan can be proposed.',expired:'A preferred time is outside the updated forecast. Review your activities manually.',infeasible:'No feasible schedule with complete data. Review your constraints.',changed:'A new proposal is available. Fixed commitments are preserved; review before accepting.',unchanged:'The previous proposal remains optimal under the selected priority.'};
  el.innerHTML='<p class="section-kicker">ADAPTIVE DAY / FORECAST REVIEW</p><h3>'+esc(r.state==='changed'?'Your forecast changed':'Review your schedule')+'</h3><p>'+esc(copy[r.state]||'')+'</p>'+(r.proposal?'<div class="decisionbaseline"><div><small>Previous proposal on new forecast</small><strong>'+esc(metric(r.prior))+'</strong></div><div><small>New proposal</small><strong>'+esc(metric(r.proposal.exposure))+'</strong></div></div><button type="button" class="btn ghost" id="reviewrevised">Review with latest forecast</button>':'');
@@ -463,10 +474,10 @@ function renderActivityTimes(){
   }).join('');
   const best=S.bestWindow(hrs,2);$('planwindowhint').hidden=!best;$('planwindowtext').textContent=best?best.start.replace('T',' ')+' – '+best.end.replace('T',' ')+' · mean US AQI '+best.avg+'. Forecast, not a guarantee of safety.':'';
   $('addactivity').disabled=activities.length>=4;
-  $('optimizeday').disabled=!hrs.length||!activities.length;
+  $('optimizeday').disabled=!hrs.length||!activities.length||activities.some(a=>a.preferred<0||a.preferred+a.duration>hrs.length);
 }
 $('applywindow').onclick=()=>{clearReview();const best=S.bestWindow(forecast(),2);if(!best)return;if(!activities.length)activities.push({name:'Walk',duration:2,preferred:best.index,flex:0});else Object.assign(activities[0],{duration:2,preferred:best.index,flex:0});renderActivityTimes();$('dayresult').textContent='Suggested window applied to first activity. Optimize to check the complete schedule.';};
-$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;clearReview();activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);invalidatePlan();$('dayresult').textContent='Plan changed. Optimize again.';};
+$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;clearReview();activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);invalidatePlan();$('optimizeday').disabled=!forecast().length||!activities.length||activities.some(a=>a.preferred<0||a.preferred+a.duration>forecast().length);$('dayresult').textContent='Plan changed. Optimize again.';};
 $('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)return;clearReview();activities.splice(Number(b.dataset.remove),1);renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('addactivity').onclick=()=>{if(activities.length>=4)return;clearReview();activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('optimizeday').onclick=()=>{
@@ -503,7 +514,7 @@ $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderF
 
 inbox=window.SvasaInbox.init({$,store,show});
 alertsOn=!!store.get('svasa_device_alerts',false)&&'Notification'in window&&Notification.permission==='granted';if(alertsOn)$('notif').textContent='Disable device alerts while open';
-window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,show,banner,notify:(...args)=>inbox.emit(...args)});
+window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,onSaved:()=>{persistReview();renderReview();},show,banner,notify:(...args)=>inbox.emit(...args)});
 window.SvasaPushUI.init({$,store,st});
 
 /* ---------- boot ---------- */

@@ -19,4 +19,14 @@ assert.equal(I.familyWindow(hrs,[{name:'A',profile:'general'},{name:'B',profile:
 assert.deepEqual(I.ledger([{exposure:90,baseline:120,completed:true},{exposure:80,baseline:40}]),{saved:2,completed:1,lower:1,completedLower:1});
 const ctx={aqi:150,pm25:50,profile:'general',window:{start:hrs[1].time,end:hrs[2].time}},answer={kind:'air',recommendation:'Consider indoor exercise.',reason:'PM2.5 is 50 µg/m³.',limitation:'Forecasts can change.'};
 assert.equal(I.verifyText(answer,ctx,S),true);assert.equal(I.verifyText({...answer,reason:'PM2.5 is 500 µg/m³.'},ctx,S),false);assert.equal(I.verifyText({...answer,reason:'Go at 19:00.'},ctx,S),false);assert.equal(I.verifyText({...answer,recommendation:'Run outdoors.'},ctx,S),false);assert.equal(I.verifyText({...answer,recommendation:'Guaranteed safe.'},ctx,S),false);
+const saved={...snap,items:snap.items.map((a,i)=>({...a,name:i===0?'Commute':'Walk'})),version:1,savedAt:100000};
+assert.ok(I.restore(saved,S,'x','general',100000));
+assert.equal(I.restore({...saved,items:'bad'},S,'x','general',100000),null);
+assert.equal(I.restore({...saved,savedAt:0},S,'x','general',49*3600000),null);
+assert.equal(I.restore({...saved,items:[{...saved.items[0],chosenTime:hrs[2].time}]},S,'x','general',100000),null);
+assert.equal(I.restore(saved,S,'different','general',100000),null);
+assert.equal(I.verifyText({...answer,reason:'AQI ९९९'},ctx,S),false);
+assert.equal(I.verifyText({...answer,reason:'AQI ১৫০'},ctx,S),true);
+assert.equal(I.verifyText({...answer,recommendation:'పూర్తిగా సురక్షితం'},ctx,S),false);
+assert.equal(I.verifyText({...answer,recommendation:'முற்றிலும் பாதுகாப்பானது'},ctx,S),false);
 console.log('Personal intelligence deterministic tests passed');

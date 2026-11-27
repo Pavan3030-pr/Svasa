@@ -31,6 +31,13 @@ function capture(items,plan,hours,cityKey,profile,policy){
  if(!plan||!Array.isArray(items)||!Array.isArray(hours)||!items.every(x=>hours[x.preferred]&&iso(hours[x.preferred].time)))return null;
  return {cityKey,profile,policy,items:items.map((a,i)=>({name:a.name,duration:a.duration,flex:a.flex,preferredTime:hours[a.preferred].time,chosenTime:plan.slots[i].start})),exposure:plan.exposure,risk:plan.risk};
 }
+// Storage is untrusted. Bound the shape and lifespan before restoring any draft.
+function restore(snapshot,S,cityKey,profile,now=Date.now()){
+ if(!snapshot||snapshot.version!==1||snapshot.cityKey!==cityKey||snapshot.profile!==profile||!Object.hasOwn(S.PROFILES,profile)||!['exposure','routine'].includes(snapshot.policy)||!Number.isFinite(snapshot.savedAt)||snapshot.savedAt>now+60000||now-snapshot.savedAt>48*3600000||!Array.isArray(snapshot.items)||snapshot.items.length<1||snapshot.items.length>4||!valid(snapshot.exposure)||!Number.isInteger(snapshot.risk)||snapshot.risk<0||snapshot.risk>snapshot.items.length)return null;
+ const names=['Commute','Walk','Workout','School','Shopping','Other'];
+ if(!snapshot.items.every(a=>a&&names.includes(a.name)&&Number.isInteger(a.duration)&&a.duration>=1&&a.duration<=4&&[0,1,2,4,6].includes(a.flex)&&iso(a.preferredTime)&&iso(a.chosenTime)&&Math.abs(Date.parse(a.preferredTime+'Z')-Date.parse(a.chosenTime+'Z'))<=a.flex*3600000))return null;
+ return {cityKey,profile,policy:snapshot.policy,items:snapshot.items.map(a=>({name:a.name,duration:a.duration,flex:a.flex,preferredTime:a.preferredTime,chosenTime:a.chosenTime})),exposure:snapshot.exposure,risk:snapshot.risk};
+}
 function revise(snapshot,hours,S,cityKey,profile){
  if(!snapshot||snapshot.cityKey!==cityKey||snapshot.profile!==profile)return {state:'different-context'};
  if(!Array.isArray(hours)||!hours.length)return {state:'unavailable'};
@@ -54,7 +61,11 @@ function familyWindow(hours,members,S){
 function ledger(entries){const a=Array.isArray(entries)?entries.filter(x=>x&&valid(x.exposure)):[];return {saved:a.length,completed:a.filter(x=>x.completed===true).length,lower:a.filter(x=>valid(x.baseline)&&x.baseline>x.exposure).length,completedLower:a.filter(x=>x.completed===true&&valid(x.baseline)&&x.baseline>x.exposure).length};}
 function verifyText(value,ctx,S){
  if(!value||value.kind!=='air')return true;
- const t=[value.recommendation,value.reason,value.limitation].join('\n'),recommendation=value.recommendation||'';
+ const digits=s=>String(s).replace(/[\u0966-\u096f\u0c66-\u0c6f\u0be6-\u0bef\u09e6-\u09ef]/g,x=>String(x.charCodeAt(0)%16-6));
+ const t=digits([value.recommendation,value.reason,value.limitation].join('\n')),recommendation=digits(value.recommendation||'');
+ if(/(?:पूरी तरह सुरक्षित|बिल्कुल सुरक्षित|कोई जोखिम नहीं|పూర్తిగా సురక్షితం|ఎలాంటి ప్రమాదం లేదు|முற்றிலும் பாதுகாப்பானது|எந்த ஆபத்தும் இல்லை|সম্পূর্ণ নিরাপদ|কোনো ঝুঁকি নেই)/u.test(t))return false;
+ const allowedAQI=new Set([Math.round(ctx.aqi),ctx.window?.avg].filter(Number.isFinite));
+ for(const m of t.matchAll(/\bAQI\s*(?:is\s*|[:=]\s*)?(\d{1,4})\b/gi))if(!allowedAQI.has(Number(m[1])))return false;
  if(/\b(?:guaranteed safe|zero risk|no risk|risk.free|100\s*%\s*safe)\b/i.test(t))return false;
  for(const m of t.matchAll(/\bPM\s*2\.5\s*(?:concentration\s*)?(?:is\s*|of\s*|[:=]\s*)?(\d+(?:\.\d+)?)\s*(?:µg|μg|ug|micrograms?)/gi))if(!valid(ctx.pm25)||Math.abs(Number(m[1])-ctx.pm25)>.51)return false;
  const permitted=new Set([ctx.window?.start?.slice(11,16),ctx.window?.end?.slice(11,16)].filter(Boolean));
@@ -62,5 +73,5 @@ function verifyText(value,ctx,S){
  if(S.effectiveLevel(ctx.aqi,ctx.profile)>=2&&/(?:^|[.!?]\s+)(?:go (?:for a )?|do |try |continue )?(?:run(?:ning)?|jog(?:ging)?|strenuous exercise|intense exercise) (?:outdoors|outside)\b/i.test(recommendation))return false;
  return true;
 }
-return {slot,compare,trust,capture,revise,familyWindow,ledger,verifyText};
+return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText};
 });

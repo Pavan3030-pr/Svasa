@@ -1,14 +1,12 @@
-# SVASA 4.0 — 90-second judging demo
+# SVASA — 90-second judging demo
 
-Use fresh live model data if available; if demonstrating with test fixtures, state that explicitly.
+Use fresh live data; identify any fixture explicitly.
 
-1. **0–15 seconds: problem.** An AQI number alone doesn't tell a commuter or family how to plan outdoor activities. Open the dashboard and identify the city, US AQI and source.
-2. **15–30 seconds: personalization and trust.** Switch a profile. Show the model and station panels, their times, and the limitations of comparing the two.
-3. **30–55 seconds: signature feature.** Add two or three outdoor activities in the planner, choose preferred times and flexibility, optimize, and show the forecast concentration-time proxy and caution windows. State that it is not measured dose or a health prediction.
-4. **55–68 seconds: useful workflow.** Save the schedule and open Reports. Export the projected plan. Show locally stored family guidance.
-5. **68–82 seconds: explainable AI.** Ask a question in the chosen language. Show recommendation, reason, limitation and authoritative model evidence. Demonstrate an emergency phrase bypassing the model.
-6. **82–90 seconds: close.** "Know your air. Plan your day." Mention uncertainty, offline protection and verified automated checks.
+1. 0–12 seconds — **The problem:** knowing today's AQI does not tell a family how to preserve essential commitments and reduce projected outdoor PM2.5 exposure.
+2. 12–25 seconds — **Trust:** show AirTrust model coverage and station comparison. Explain that a source discrepancy is a heuristic, not a probability or validation.
+3. 25–50 seconds — **Parallel Futures:** set a fixed commute and flexible walk or workout. Optimize, show the paired bars and per-activity original/optimized times. Switch priorities to demonstrate the trade-off. If no improvement is available, say so rather than manufacture one.
+4. 50–65 seconds — **Adaptive Day + Impact Ledger:** save, mark completed, reload, and reopen Planner to review the saved schedule with the latest forecast. Show the forget control. Completion is self-reported, not measured exposure.
+5. 65–78 seconds — **Family + AI:** add a child or older adult profile, show the shared forecast window, then ask the assistant a relevant question. Explain verified evidence and safe fallback.
+6. 78–90 seconds — **Proof:** show green CI and the seeded exhaustive-optimality benchmark from the test log. Synthetic schedules establish algorithm behavior, not personal health outcomes. Close: "Don't just monitor the air. Make a better decision."
 
-Before judging, verify /api/health, the current workflow run, and the deployment. Do not claim live Gemini, station coverage, or audit scores unless tested.
-
-Optional final proof: show the notification test and user-confirmed receipt only if it really arrived. Use the voluntary feedback form and cite genuine participant results only after a consent-based usability study; do not count automated browser test inputs as participant feedback.
+Before submission verify exact deployment SHA, live data/API availability, browser screenshots and genuine usability feedback. Do not claim perfect security or measured health outcomes.
