@@ -109,3 +109,5 @@ Vercel Marketplace Redis credentials may be named `KV_REST_API_URL` and `KV_REST
 The optional notification test button sends only to the current browser's owned subscription, with a five-minute server cooldown. VAPID public/private key correspondence is checked before background alerts are enabled. A push-service acceptance is not evidence of OS-level delivery; confirm the device notification manually.
 
 Native-script validation is enforced in each non-English response field. One bounded retry is allowed for malformed or wrong-language AI output; unsupported responses fail closed. Production tests report HTTP status, source and per-field script checks without recording user conversation text.
+
+Gemini HTTP 429 responses produce explicitly labelled, localized rule-based general guidance from fresh server data. This is not counted as a live Gemini success. Production live language requests are paced and quota-limited evaluations remain incomplete (nonzero exit), rather than being misreported as passing.

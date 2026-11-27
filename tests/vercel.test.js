@@ -13,4 +13,6 @@ const call=(o)=>new Promise(r=>{const res={headers:{},setHeader(k,v){this.header
  assert.equal((await call({body:{q:'x',ctx:{aqi:'bad'}}})).code,400);
  assert.equal((await call({body:{q:'I cannot breathe',ctx}})).b.source,'safety');
  assert.equal((await call({body:{q:'a'.repeat(5000),ctx}})).code,413);
+ global.fetch=async u=>String(u).includes('air-quality-api')?{ok:true,json:async()=>airFixture()}:{ok:false,status:429};
+ r=await call({body:{q:'Can I walk?',ctx:{...ctx,lang:'ta'}}});assert.equal(r.code,200);assert.equal(r.b.source,'rules');assert.equal(r.b.reason,'provider_rate_limit');assert.match(r.b.sections.limitation,/[\u0b80-\u0bff]/);assert.equal(r.b.evidence.aqi,160);
  console.log('vercel function tests passed');process.exit(0)})();

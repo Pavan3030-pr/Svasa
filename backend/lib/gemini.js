@@ -27,6 +27,7 @@ async function generate(q,ctx){
   for(let attempt=0;attempt<2;attempt++){
   const remaining=deadline-Date.now();if(remaining<1500)break;
   const res=await fetch(base+'/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({systemInstruction:{parts:[{text:system+(attempt?' Correct any formatting or language error: use the exact JSON schema and requested native script in all three fields.':'')}]},contents:[{role:'user',parts:[{text:JSON.stringify(input)}]}],generationConfig}),signal:AbortSignal.timeout(Math.min(8000,remaining))});
+  if(res.status===429)return {status:503,error:'AI provider rate limit',quotaLimited:true};
   if(!res.ok)return {status:502,error:'AI provider error '+res.status};
   const value=validateResponse(S.parseGemini(await res.json()),ctx);
   if(value)return {status:200,value};

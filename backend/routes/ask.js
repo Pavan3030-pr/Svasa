@@ -20,6 +20,7 @@ module.exports = async function ask(req) {
     let ctx;
     try { ctx=await air.verifiedContext(b.place,b.ctx&&b.ctx.profile,b.ctx&&b.ctx.lang,b.ctx&&b.ctx.hist); } catch (_) { return R(503,{error:'Verified air data unavailable'}); }
     const r = await gemini.generate(q, ctx);
+    if(r.quotaLimited){const value=require('../lib/quota-guidance')(ctx);return R(200,{sections:value,answer:[value.recommendation,value.reason,value.limitation].join('\n'),source:'rules',reason:'provider_rate_limit',evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window}});}
     if (r.error) return R(r.status, { error: r.error });
     if (r.value.kind === 'offtopic') return R(200, { answer: 'I can only help with air quality, health and outdoor planning.', source: 'offtopic' });
     return R(200, { sections:r.value, answer: [r.value.recommendation,r.value.reason,r.value.limitation].join('\n') + '\n' + S.sources(ctx, ctx.lang) + ' (UTC) · Open-Meteo / CAMS · ' + ctx.observedAt, source: 'gemini', evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window} });
