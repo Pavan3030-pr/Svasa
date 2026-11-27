@@ -30,7 +30,16 @@ jobs:
             for mode in mobile desktop; do
               EXTRA=""
               if [ "$mode" = desktop ]; then EXTRA="--preset=desktop"; fi
-              npx --no-install lighthouse "http://localhost:8080/$page.html" $EXTRA --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path="quality-artifacts/$page-$mode.json" --quiet
+              OUTPUT="quality-artifacts/$page-$mode.json"
+              for attempt in 1 2 3; do
+                rm -f "$OUTPUT"
+                if npx --no-install lighthouse "http://localhost:8080/$page.html" $EXTRA --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path="$OUTPUT" --quiet; then
+                  if node -e 'const r=require("./"+process.argv[1]);process.exit(r.runtimeError?1:0)' "$OUTPUT"; then break; fi
+                fi
+                if [ "$attempt" = 3 ]; then echo "Audit did not produce a valid trace"; exit 1; fi
+                echo "Retrying invalid audit trace (not a score-based retry): $page $mode"
+                sleep 2
+              done
             done
           done
           node -e "const fs=require('fs');for(const f of fs.readdirSync('quality-artifacts').filter(x=>x.endsWith('.json'))){const j=JSON.parse(fs.readFileSync('quality-artifacts/'+f));if(j.runtimeError)throw Error(j.runtimeError.message);console.log(f,JSON.stringify(Object.fromEntries(Object.entries(j.categories).map(([k,v])=>[k,Math.round(v.score*100)]))));console.log('Diagnostics',JSON.stringify(Object.values(j.audits).filter(a=>a.score!==null&&a.score<0.9).map(a=>({id:a.id,score:a.score,displayValue:a.displayValue})).slice(0,25)))}" | tee quality-artifacts/scores.txt
