@@ -6,7 +6,7 @@ module.exports = async function stations(req) {
   if (!openaq.enabled()) return R(503, { error: 'Ground stations not configured' });
   const q = req.query || {}, lat = Number(q.lat), lon = Number(q.lon);
   if (!isFinite(lat) || !isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return R(400, { error: 'Invalid coordinates' });
-  if (g.limited('st:' + req.ip, 30)) return R(429, { error: 'Too many requests. Try again in a minute.' });
+  try{if(await g.rateLimit('st:'+req.ip,30))return R(429,{error:'Too many requests. Try again in a minute.'});}catch(_){return R(503,{error:'Rate limit service unavailable'});}
   try { return R(200, { station: await openaq.nearest(lat, lon) }); }
   catch (e) { return R(502, { error: 'Station lookup failed' }); }
 };

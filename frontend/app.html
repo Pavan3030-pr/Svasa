@@ -46,14 +46,14 @@
         <div class="card onb" id="onb" hidden><h2>Who are you breathing for?</h2><p class="muted">Pick a profile and Svasa tunes every tip to it. You can change it any time from the Profile menu.</p><div class="chips" id="onbchips"></div><div class="row" style="margin-top:12px"><button type="button" class="btn ghost sm" id="onbskip">Skip for now</button></div></div>
         <div class="hero card" id="hero"><div class="skel" aria-busy="true"></div></div>
         <details class="card about"><summary>How to read these numbers</summary>
-          <p><b>US AQI</b> is supplied by the atmospheric model. Pollutant-specific averaging periods differ. Official India NAQI is not displayed until adequate averaging and pollutant coverage are available.</p>
+          <p><b>US AQI</b> is supplied by the atmospheric model. Pollutant-specific averaging periods differ. The optional India-scale number is a partial model estimate using at least three of four available 24-hour pollutants, including particulate matter, and at least 16 hourly values per pollutant. CO, ozone, ammonia and lead are excluded, so the estimate may understate the full index. It is not an official CPCB AQI.</p>
           <p>The pollutant concentrations below are <b>current hourly readings</b>, so they can look higher or lower than the AQI, which smooths over the day.</p>
           <p><b>Data source:</b> Open-Meteo / Copernicus CAMS atmospheric model. These are modelled estimates for a grid cell, not readings from a monitor on your street.</p></details>
         <div class="card" id="gcard" hidden><div class="cardhead"><h2>Ground check</h2><span class="pill brand">Nearest monitoring station · OpenAQ</span></div><div id="gs"></div></div>
         <div class="card"><div class="cardhead"><h2>Next 12 hours</h2><span class="muted" style="margin:0">US AQI by hour</span></div><div id="strip" class="strip scroll"></div></div>
         <div class="grid2">
           <div class="card"><h2>What to do now</h2><div class="tiles" id="adv"></div><div id="alert"></div></div>
-          <div class="card"><h2>What is in the air</h2><div id="pol"></div><p class="foot">Current modelled concentrations. Health guideline comparisons require matching averaging periods.</p></div>
+          <div class="card"><h2>What is in the air</h2><div id="pol"></div><p class="foot">Current modelled concentrations. WHO 24-hour comparisons appear only when all 24 model hours are present for a relevant pollutant.</p></div>
         </div>
         <div class="card"><div class="cardhead"><h2>Alerts and install</h2></div>
           <div class="row"><button type="button" class="btn ghost" id="notif">Enable in-app alerts</button>

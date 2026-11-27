@@ -37,7 +37,7 @@ async function load(p) {
   st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
   try {
-    const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5&forecast_days=2&past_days=7&timezone=auto`);
+    const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5,pm10,nitrogen_dioxide,sulphur_dioxide&forecast_days=2&past_days=7&timezone=auto`);
     if (seq !== loadSequence) return;
     if (!d.current || !S.band(d.current.us_aqi)) throw new Error('No data for this location yet');
     const age=S.readingAge(d);if(age===null||age>3||age< -1)throw new Error('Provider reading is stale or has no valid timestamp');
@@ -66,7 +66,7 @@ function render() {
   const root = document.documentElement.style; root.setProperty('--c', b.color); root.setProperty('--t', b.bg); root.setProperty('--ci', b.ink);
   st.ctx = { aqi, profile: st.profile, dominant: dom, window: win, trend: tr, city: st.place.name, wx: st.wx };
 
-  const ind = null, wn = S.windNote(st.wx && st.wx.w, aqi);
+  const ind = !st.demo&&!st.stale?S.indiaModel24(st.data,c.time):null, wn = S.windNote(st.wx && st.wx.w, aqi);
   const status = st.demo ? 'Sample data' : st.stale ? 'Offline snapshot' : 'Live';
   const trendLabel = { rising: '↗ Worsening', falling: '↘ Improving', steady: '→ Steady' }[tr];
   $('hero').innerHTML =
@@ -78,7 +78,7 @@ function render() {
      <div class="chips-row">
        <span class="chip2">${trendLabel}</span>
        <span class="chip2" title="Modelled estimate from Open-Meteo / CAMS, not a street monitor">Modelled data · Open-Meteo</span>
-       ${ind ? `<span class="chip2">India NAQI ${ind.aqi} · ${esc(ind.label)}</span>` : ''}
+       ${ind ? `<span class="chip2" title="Partial model-based estimate using ${ind.pollutants.length} of eight pollutants, not official CPCB AQI">India scale (partial) ${ind.aqi} · ${esc(ind.label)}</span>` : ''}
        ${win ? `<span class="chip2">Cleanest ${win.start.slice(11, 16)}–${win.end.slice(11, 16)}</span>` : ''}
        ${st.wx ? `<span class="chip2">${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h</span>` : ''}
        <button type="button" class="btn sm" id="goplan">Plan my day</button>
@@ -97,8 +97,8 @@ function render() {
 
   const keys = ['pm2_5', 'pm10', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 'carbon_monoxide'];
   $('pol').innerHTML = keys.filter(k => typeof c[k] === 'number').map(k => {
-    const P = S.POLLUTANTS[k];
-    return `<div class="pol ${k === dom ? 'dom' : ''}"><b>${P.name}</b><small>${c[k].toFixed(1)} ${P.unit} · model estimate</small><span class="note">${esc(P.note)}</span></div>`;
+    const P = S.POLLUTANTS[k], mean=(!st.demo&&!st.stale&&['pm2_5','pm10','nitrogen_dioxide','sulphur_dioxide','carbon_monoxide'].includes(k))?S.historicalMean(st.data,k,c.time,24):null;
+    return `<div class="pol ${k === dom ? 'dom' : ''}"><b>${P.name}</b><small>${c[k].toFixed(1)} ${P.unit} · model estimate</small><span class="note">${esc(P.note)}${mean?' · 24h model mean '+mean.mean.toFixed(1)+' '+P.unit+'; '+S.whoRatio(k,mean.mean)+'× WHO 24h guideline':''}</span></div>`;
   }).join('');
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';

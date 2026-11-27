@@ -297,6 +297,34 @@
     return {...result,baseline,changePct:baseline>0?Math.round((baseline-result.exposure)/baseline*100):null};
   }
 
-  const api = { readingAge, cleanQuestion, optimizeDay, pm25ToAqi, dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
+
+  // Use the 24 hourly slots ending at the most recent full hour, not the last 24 non-null values.
+  function historicalMean(data,key,until,hours,minHours=hours) {
+    const times=data?.hourly?.time,values=data?.hourly?.[key];
+    if(!Array.isArray(times)||!Array.isArray(values)||typeof until!=='string'||!Number.isInteger(hours)||hours<1||hours>24)return null;
+    const end=Date.parse(until.slice(0,13)+':00Z')-3600000;
+    if(!Number.isFinite(end))return null;
+    const readings=new Map();
+    for(let i=0;i<times.length;i++){
+      const t=Date.parse(times[i]+'Z'),v=values[i];
+      if(Number.isFinite(t)&&t<=end&&t>end-hours*3600000&&Number.isFinite(v)&&v>=0)readings.set(t,v);
+    }
+    if(readings.size<minHours)return null;
+    return {mean:[...readings.values()].reduce((s,v)=>s+v,0)/readings.size,count:readings.size};
+  }
+  // Partial Indian scale model estimate: only the four 24-hour pollutant components.
+  // Not official CPCB AQI; ozone, CO, ammonia and lead are not included.
+  function indiaModel24(data,until){
+    const averages={},coverage={};
+    for(const k of ['pm2_5','pm10','nitrogen_dioxide','sulphur_dioxide']){
+      const m=historicalMean(data,k,until,24,16);
+      if(m){averages[k]=m.mean;coverage[k]=m.count;}
+    }
+    if(Object.keys(averages).length<3||(!Object.hasOwn(averages,'pm2_5')&&!Object.hasOwn(averages,'pm10')))return null;
+    const result=indiaAqi(averages);
+    return result?{...result,coverage,pollutants:Object.keys(averages),partial:true}:null;
+  }
+
+  const api = { historicalMean, indiaModel24, readingAge, cleanQuestion, optimizeDay, pm25ToAqi, dispersion, verdict, isOffTopic, lastDays, trailingAvg, indiaAqi, tips, vsWeek, LANGS, dailyAvg, insights, safety, sources, validateCtx, planTrip, trend, rank, buildPrompt, parseGemini, windNote, BANDS, PROFILES, POLLUTANTS, band, bandIndex, effectiveLevel, dominant, whoRatio, mask, advice, bestWindow, hourlyFrom, cleanQuery, answer };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.Svasa = api;
 })(typeof window !== 'undefined' ? window : globalThis);
