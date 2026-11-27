@@ -25,6 +25,7 @@
     <button type="button" data-view="cities" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><span>Cities</span></button>
     <button type="button" data-view="breathe" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h11a3 3 0 100-3M3 12h15a3 3 0 110 3M3 16h8a3 3 0 110 3"/></svg><span>Breathe</span></button>
     <button type="button" data-view="ask" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 01-11.5 7.2L4 20l1-4.5A8 8 0 1121 12z"/></svg><span>Assistant</span></button>
+    <button type="button" data-view="family" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20v-2a6 6 0 0 1 12 0v2m2-6a4 4 0 0 1 4 4v2"/></svg><span>Family</span></button>
   </nav>
 
   <div class="main">
@@ -44,7 +45,7 @@
         <div class="card onb" id="onb" hidden><h2>Who are you breathing for?</h2><p class="muted">Pick a profile and Svasa tunes every tip to it. You can change it any time from the Profile menu.</p><div class="chips" id="onbchips"></div><div class="row" style="margin-top:12px"><button type="button" class="btn ghost sm" id="onbskip">Skip for now</button></div></div>
         <div class="hero card" id="hero"><div class="skel" aria-busy="true"></div></div>
         <details class="card about"><summary>How to read these numbers</summary>
-          <p><b>US AQI</b> comes from the US EPA scale and is calculated from 24-hour averages of each pollutant. <b>India NAQI</b> uses the stricter-in-places Indian (CPCB) breakpoints, so the two scores can differ for the same air. Here NAQI is estimated from the 24-hour PM2.5 average and current readings of the other pollutants.</p>
+          <p><b>US AQI</b> is supplied by the atmospheric model. Pollutant-specific averaging periods differ. Official India NAQI is not displayed until adequate averaging and pollutant coverage are available.</p>
           <p>The pollutant concentrations below are <b>current hourly readings</b>, so they can look higher or lower than the AQI, which smooths over the day.</p>
           <p><b>Data source:</b> Open-Meteo / Copernicus CAMS atmospheric model. These are modelled estimates for a grid cell, not readings from a monitor on your street.</p></details>
         <div class="card" id="gcard" hidden><div class="cardhead"><h2>Ground check</h2><span class="pill brand">Nearest monitoring station · OpenAQ</span></div><div id="gs"></div></div>
@@ -57,7 +58,7 @@
           <div class="row"><button type="button" class="btn ghost" id="notif">Enable in-app alerts</button>
           <select id="thr" aria-label="Alert level"><option value="1">From Moderate</option><option value="2" selected>From Sensitive level</option><option value="3">From Unhealthy</option></select>
           <button type="button" class="btn ghost" id="inst" hidden>Install app</button></div>
-          <p class="foot">Alerts fire while the app is open or installed. Data are modelled estimates (Open-Meteo / CAMS), not ground-monitor readings. General guidance only, not medical advice.</p></div>
+          <p class="foot">Alerts are checked while this app is open; they are not background push alerts. Data are modelled estimates (Open-Meteo / CAMS), not ground-monitor readings. General guidance only, not medical advice.</p></div>
       </section>
 
       <section id="v-hourly" class="view" hidden>
@@ -67,6 +68,7 @@
       </section>
 
       <section id="v-plan" class="view" hidden>
+        <div class="card dayplanner"><p class="section-kicker">PERSONAL AIR INTELLIGENCE</p><h2>Make room for cleaner air.</h2><p class="muted">Plan up to four outdoor activities in order, using the next 24 forecast hours. Choose preferred times, flexibility and duration.</p><div id="activities"></div><div class="row"><button id="addactivity" type="button" class="btn ghost">Add activity</button><button id="optimizeday" type="button" class="btn">Optimize my day</button></div><div id="dayresult" class="result" role="status">Load a fresh forecast to get started.</div><p class="foot">Exposure proxy = outdoor PM2.5 concentration × hours (µg·h/m³). Not an inhaled dose or guarantee of safety. The planner prioritizes fewer caution windows, then lower exposure.</p></div>
         <div class="card"><h2>Plan a commute or workout</h2><p class="muted">Find the cleanest start time in the next 24 hours.</p>
           <div class="form-row">
             <label>Duration<select id="dur"><option value="1">1 hour</option><option value="2" selected>2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select></label>
@@ -82,6 +84,7 @@
           <p class="muted">Cleanest first. Tap a city to open it.</p><div class="chips" id="pop" style="margin:12px 0"></div><div id="cmp"></div></div>
       </section>
 
+      <section id="v-family" class="view" hidden><div class="card"><p class="section-kicker">FAMILY AIR PROTECTION</p><h2>One city. Individual guidance.</h2><p class="muted">Use nicknames only. Profiles are saved on this browser; no account is required.</p><form id="familyform" class="form-row"><label>Nickname<input id="familyname" type="text" maxlength="30" required></label><label>Profile<select id="familyprofile"></select></label><button class="btn" type="submit">Add profile</button></form><div id="familyresults" class="familygrid" aria-live="polite"></div><button id="clearfamily" class="btn ghost" type="button">Clear family profiles</button><p class="foot">General guidance only; follow your clinician’s advice.</p></div></section>
       <section id="v-breathe" class="view" hidden>
         <div class="card breathe"><h2>Breathe</h2><p class="muted">A calm 4-4-6 rhythm: breathe in for 4, hold for 4, breathe out for 6.</p>
           <div class="orbwrap"><div class="orb" id="borb" aria-hidden="true"></div></div>
