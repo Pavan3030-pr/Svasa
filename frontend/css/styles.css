@@ -141,3 +141,6 @@ a.logo{text-decoration:none}
 
 /* Compact above-the-fold mobile layout without hiding the source or status. */
 .ring{transition:none}.hero{transition:none}.top{backdrop-filter:none} @media(max-width:620px){.banner{min-height:64px;padding:8px 12px;font-size:13px}.hero{min-height:360px;gap:16px;padding:18px}.hero .ring{width:128px;height:128px}.hero .ring>div{width:104px;height:104px}.hero .ring b{font-size:40px}.hero .lead{min-height:42px}.hero .eyebrow{min-height:20px}.hero h1{font-size:30px}.hero .chips-row{margin-top:8px}}
+
+/* Skip offscreen dashboard painting while preserving layout and semantic content. */
+@media(max-width:620px){#v-today>.card:not(.hero){content-visibility:auto;contain-intrinsic-size:auto 260px}.hero .ring{background:conic-gradient(from 0deg,var(--c) calc(var(--p,0)*1%),#d8e5dc 0)}.hero .ring>div{box-shadow:none}}

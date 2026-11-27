@@ -23,8 +23,8 @@ async function check(name,fn){try{out.checks[name]=await fn();}catch(e){out.chec
   return {result:results.every(x=>x.pass)?'pass':'fail',cases:results,scope:'Script, response schema and evidence only; not clinical or translation-quality assessment'};
  });
  await check('schedulerAuthorization',async()=>{const r=await json('/api/push-dispatch');assert.equal(r.status,403);return {result:'pass'};});
- await check('stations',async()=>{if(!health?.stations)return {result:'not configured'};const r=await json('/api/stations?lat=17.385&lon=78.4867');assert.equal(r.status,200);return {result:'pass',stationAvailable:!!r.data.station};});
- await check('pushConfig',async()=>{const r=await json('/api/push');assert.equal(r.status,200);assert.equal(typeof r.data.enabled,'boolean');return {result:'pass',enabled:r.data.enabled};});
+ await check('stations',async()=>{if(!health?.stations)return {result:'not configured'};const r=await json('/api/stations?lat=17.385&lon=78.4867');assert.equal(r.status,200);return {result:'pass',stationAvailable:!!r.data.station,readingValid:r.data.station?Number.isFinite(r.data.station.pm25)&&r.data.station.pm25>=0:null};});
+ await check('pushConfig',async()=>{const r=await json('/api/push');assert.equal(r.status,200);assert.equal(typeof r.data.enabled,'boolean');if(health?.distributedRateLimit){assert.equal(r.data.enabled,true,'Push disabled despite Redis configuration; check VAPID pair and subject');assert.match(r.data.publicKey,/^[A-Za-z0-9_-]{87}$/);}return {result:'pass',enabled:r.data.enabled};});
  console.log(JSON.stringify(out,null,2));require('node:fs').mkdirSync('production-artifacts',{recursive:true});require('node:fs').writeFileSync('production-artifacts/results.json',JSON.stringify(out,null,2));
  if(Object.values(out.checks).some(x=>x.result==='fail'))process.exitCode=1;
 })().catch(e=>{console.error(e.message);process.exitCode=1;});

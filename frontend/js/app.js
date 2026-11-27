@@ -419,7 +419,7 @@ async function initPush(){
  try{
   const r=await fetch('/api/push');if(!r.ok)return;pushConfig=await r.json();
   const existing=store.get('svasa_push',null);
-  $('pushoff').hidden=!existing;
+  $('pushoff').hidden=!existing;$('pushtest').hidden=!existing||!pushConfig.enabled;
   $('pushon').hidden=!pushConfig.enabled;$('pushthreshold').hidden=!pushConfig.enabled;
   if(existing)pushStatus('Saved subscription for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or disable it here.');
  }catch(_){}
@@ -440,13 +440,15 @@ $('pushon').onclick=async()=>{
   store.set('svasa_push',{endpoint:sub.endpoint,token,city,threshold});
   $('pushoff').hidden=false;
   await pushApi({action:'subscribe',subscription:sub.toJSON(),token,place,threshold});
+  $('pushtest').hidden=false;
   pushStatus('Background alerts enabled for '+city+' · US AQI '+threshold+'+. Scheduled checks, not real-time alerts.');
  }catch(e){pushStatus(e.message+'; you can retry or disable the subscription.');}finally{btn.disabled=false;}
 };
 $('pushoff').onclick=async()=>{
  const old=store.get('svasa_push',null);if(!old)return;
- try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
+ try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;$('pushtest').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
 };
+$('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});pushStatus('Test accepted by the push service. Check your device notifications to confirm delivery.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
 initPush();
 
 /* ---------- boot ---------- */

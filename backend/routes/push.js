@@ -15,7 +15,7 @@ module.exports=async function route(req){
  if(!push.configured())return R(503,{error:'Push not configured'});
  try{
   if(await g.rateLimit('push:'+req.ip,5))return R(429,{error:'Too many requests'});
-  const status=req.body?.action==='subscribe'?await push.subscribe(req.body):req.body?.action==='unsubscribe'?await push.unsubscribe(req.body):400;
+  const status=req.body?.action==='subscribe'?await push.subscribe(req.body):req.body?.action==='unsubscribe'?await push.unsubscribe(req.body):req.body?.action==='test'?await push.testDelivery(req.body):400;
   return R(status,{ok:status===200});
  }catch(_){return R(503,{error:'Push storage unavailable'});}
 };

@@ -1,8 +1,11 @@
 'use strict';
-const {createHash,timingSafeEqual}=require('node:crypto');
+const {createHash,timingSafeEqual,createECDH}=require('node:crypto');
 const guard=require('./guard'),air=require('./air-context');
 const INDEX='svasa:push:index',PREFIX='svasa:push:',TTL=30*86400;
-const configured=()=>guard.distributedConfigured()&&!!(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY&&process.env.VAPID_SUBJECT&&process.env.CRON_SECRET);
+function validVapid(publicKey,privateKey){
+ try{const e=createECDH('prime256v1'),pub=Buffer.from(publicKey||'','base64url'),priv=Buffer.from(privateKey||'','base64url');if(pub.length!==65||priv.length!==32)return false;e.setPrivateKey(priv);return timingSafeEqual(pub,e.getPublicKey());}catch(_){return false;}
+}
+const configured=()=>guard.distributedConfigured()&&!!(process.env.VAPID_SUBJECT&&process.env.CRON_SECRET)&&validVapid(process.env.VAPID_PUBLIC_KEY,process.env.VAPID_PRIVATE_KEY);
 const digest=s=>createHash('sha256').update(s).digest('hex');
 function validSubscription(s){
  if(!s||typeof s.endpoint!=='string'||s.endpoint.length>1024||!s.keys)return false;
@@ -35,6 +38,16 @@ function authorized(header){
  const expected='Bearer '+(process.env.CRON_SECRET||'');if(!process.env.CRON_SECRET||typeof header!=='string')return false;
  const a=Buffer.from(header),b=Buffer.from(expected);return a.length===b.length&&timingSafeEqual(a,b);
 }
+async function testDelivery(body,deps={}){
+ if(!body||typeof body.endpoint!=='string'||body.endpoint.length>1024||!validToken(body.token))return 400;
+ const storage=deps.storage||redis,transport=deps.transport||require('web-push'),id=digest(body.endpoint);
+ const raw=await storage(['GET',PREFIX+id]);if(!raw)return 404;
+ const record=JSON.parse(raw);
+ if(record.tokenHash!==digest(body.token)||!validSubscription(record.subscription)||record.subscription.endpoint!==body.endpoint)return 403;
+ if(await storage(['SET',PREFIX+'test:'+id,'1','NX','EX','300'])!=='OK')return 429;
+ transport.setVapidDetails(process.env.VAPID_SUBJECT,process.env.VAPID_PUBLIC_KEY,process.env.VAPID_PRIVATE_KEY);
+ try{await transport.sendNotification(record.subscription,JSON.stringify({title:'Svasa · Test notification',body:'Your device can receive background air-quality notifications.'}),{TTL:300,timeout:5000});return 200;}catch(_){return 502;}
+}
 async function dispatch(deps={}){
  const webpush=deps.transport||require('web-push'),storage=deps.storage||redis,context=deps.context||air.verifiedContext;
  webpush.setVapidDetails(process.env.VAPID_SUBJECT,process.env.VAPID_PUBLIC_KEY,process.env.VAPID_PRIVATE_KEY);
@@ -59,4 +72,4 @@ async function dispatch(deps={}){
  }));
  return {checked:ids.length,sent,errors};
 }
-module.exports={configured,validSubscription,validate,subscribe,unsubscribe,authorized,dispatch};
+module.exports={configured,validVapid,validSubscription,validate,subscribe,unsubscribe,authorized,dispatch,testDelivery};
