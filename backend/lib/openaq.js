@@ -10,7 +10,7 @@ function km(a, b, c, d) {
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 async function oq(path) {
-  const r = await fetch(BASE() + '/v3' + path, { headers: { 'X-API-Key': process.env.OPENAQ_API_KEY, Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+  const r = await fetch(BASE() + '/v3' + path, { headers: { 'X-API-Key': process.env.OPENAQ_API_KEY, Accept: 'application/json' }, signal: AbortSignal.timeout(8000), redirect: 'error' });
   if (!r.ok) throw Object.assign(new Error('openaq ' + r.status), { status: r.status });
   return r.json();
 }

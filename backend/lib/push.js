@@ -21,7 +21,7 @@ function validate(body){
  return {subscription:{endpoint:s.endpoint,keys:{p256dh:s.keys.p256dh,auth:s.keys.auth}},place:{lat:Math.round(lat*100)/100,lon:Math.round(lon*100)/100},threshold:body.threshold};
 }
 async function redis(cmd){
- const config=guard.redisConfig();const r=await fetch(config.url,{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify(cmd),signal:AbortSignal.timeout(3000)});
+ const config=guard.redisConfig();const r=await fetch(config.url,{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify(cmd),signal:AbortSignal.timeout(3000),redirect:'error'});
  if(!r.ok)throw Error('storage unavailable');const j=await r.json();if(j.error)throw Error('storage unavailable');return j.result;
 }
 async function subscribe(body){

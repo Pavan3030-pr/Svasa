@@ -4,16 +4,21 @@ const {createHash}=require('node:crypto');
 const redisConfig=()=>({url:process.env.UPSTASH_REDIS_REST_URL||process.env.KV_REST_API_URL,token:process.env.UPSTASH_REDIS_REST_TOKEN||process.env.KV_REST_API_TOKEN});
 const distributedConfigured=()=>{const c=redisConfig();return !!(c.url&&c.token);};
 const ip = req => String((process.env.VERCEL && req.headers && req.headers['x-vercel-forwarded-for']) || (req.socket && req.socket.remoteAddress) || 'unknown').split(',')[0].trim().slice(0,100);
-function limited(key, max = 20) {
-  const n = Date.now(), a = (hits.get(key) || []).filter(t => n - t < 60000);
-  a.push(n); hits.set(key, a); if (hits.size > 5000) hits.clear();
-  return a.length > max;
+// Bounded local fixed-window fallback. Never reset all active counters under pressure.
+function limited(key,max=20){
+ const now=Date.now(),id=String(key);let row=hits.get(id);
+ if(!row||row.until<=now){
+  if(!row&&hits.size>=5000){for(const [k,v] of hits)if(v.until<=now)hits.delete(k);if(hits.size>=5000)return true;}
+  row={count:0,until:now+60000};hits.set(id,row);
+ }
+ if(row.count>=max)return true;
+ row.count++;return false;
 }
 async function rateLimit(key,max=20){
   if(!distributedConfigured())return limited(key,max);
   const id=createHash('sha256').update(String(key)).digest('hex');
   const script="local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n";
-  const config=redisConfig();const response=await fetch(config.url,{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify(['EVAL',script,'1','svasa:limit:'+id]),signal:AbortSignal.timeout(2000)});
+  const config=redisConfig();const response=await fetch(config.url,{method:'POST',headers:{Authorization:'Bearer '+config.token,'Content-Type':'application/json'},body:JSON.stringify(['EVAL',script,'1','svasa:limit:'+id]),signal:AbortSignal.timeout(2000),redirect:'error'});
   if(!response.ok)throw new Error('Rate limit service unavailable');const value=await response.json();if(!Number.isInteger(value.result)||value.result<1)throw new Error('Rate limit service unavailable');return value.result>max;
 }
 // Shared daily provider budget. Count actual outbound attempts, including retries.

@@ -7,9 +7,23 @@ const assert=require('node:assert/strict'),g=require('../backend/lib/guard');
  process.env.GEMINI_DAILY_LIMIT='2';assert.equal(g.providerLimit(),2);
  process.env.UPSTASH_REDIS_REST_URL='https://redis.example.test';process.env.UPSTASH_REDIS_REST_TOKEN='fixture';
  let used=0;global.fetch=async(url,opt)=>{assert.equal(url,'https://redis.example.test');assert.equal(opt.redirect,'error');const cmd=JSON.parse(opt.body);assert.equal(cmd[0],'EVAL');assert.match(cmd[3],/^svasa:gemini:budget:/);assert.equal(cmd[4],'2');return {ok:true,json:async()=>({result:used++<2?1:0})};};
+ const budgetFetch=global.fetch;
+ global.fetch=async(url,opt)=>{assert.equal(opt.redirect,'error');assert.match(JSON.parse(opt.body)[3],/^svasa:limit:/);return {ok:true,json:async()=>({result:2})};};
+ assert.equal(await g.rateLimit('fixture',1),true);global.fetch=budgetFetch;
  const results=await Promise.all(Array.from({length:10},()=>g.reserveModelAttempt()));assert.equal(results.filter(Boolean).length,2);
  global.fetch=async()=>({ok:true,json:async()=>({result:'unexpected'})});await assert.rejects(g.reserveModelAttempt,/Provider budget unavailable/);
  delete process.env.UPSTASH_REDIS_REST_URL;delete process.env.UPSTASH_REDIS_REST_TOKEN;
  assert.equal(await g.reserveModelAttempt(),true);assert.equal(await g.reserveModelAttempt(),true);assert.equal(await g.reserveModelAttempt(),false);
+ const now=Date.now,clock=now();let elapsed=0;Date.now=()=>clock+elapsed;
+ try{
+  assert.equal(g.limited('protected',1),false);assert.equal(g.limited('protected',1),true);
+  for(let i=0;i<4999;i++)assert.equal(g.limited('fixture:'+i,1),false);
+  assert.equal(g.limited('overflow',1),true);assert.equal(g.limited('protected',1),true);
+  elapsed=60001;assert.equal(g.limited('overflow',1),false);assert.equal(g.limited('protected',1),false);
+ }finally{Date.now=now;}
+ process.env.OPENAQ_API_KEY='fixture';const oq=require('../backend/lib/openaq');
+ global.fetch=async(url,opt)=>{assert.equal(opt.redirect,'error');throw Error('redirect rejected');};
+ await assert.rejects(()=>oq.nearest(17.385,78.4867),/redirect rejected/);
+ delete process.env.OPENAQ_API_KEY;
  console.log('Security regression: strict origin/media type, shared provider budget contract and fail-closed storage passed (fixture Redis).');
 })().catch(e=>{console.error(e);process.exitCode=1;});
