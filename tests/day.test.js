@@ -5,4 +5,9 @@ assert.equal(p.exposure,30);assert.equal(p.baseline,160);assert.equal(p.slots[0]
 assert.equal(S.optimizeDay(hrs,[{duration:2,preferred:0,earliest:0,latest:2},{duration:2,preferred:0,earliest:0,latest:2}],'general'),null);
 assert.equal(S.optimizeDay([{...hrs[0],pm2_5:null}],[{duration:1,preferred:0,earliest:0,latest:1}],'general'),null);
 assert.equal(S.optimizeDay(hrs,[{duration:0,preferred:0,earliest:0,latest:2}],'general'),null);
-console.log('Personal day planner tests passed');
+const trade=[40,30,10,30,5,50].map((pm,i)=>({time:'2026-11-27T0'+i+':00',aqi:40,pm2_5:pm}));
+const commitments=[{duration:1,preferred:0,earliest:0,latest:3},{duration:1,preferred:3,earliest:3,latest:4},{duration:1,preferred:5,earliest:4,latest:6}];
+const low=S.optimizeDay(trade,commitments,'general','exposure'),routine=S.optimizeDay(trade,commitments,'general','routine');
+assert.equal(low.exposure,45);assert.equal(low.shift,3);assert.equal(routine.exposure,120);assert.equal(routine.shift,0);assert.equal(low.slots[1].index,3);assert.equal(routine.slots[1].index,3);assert.equal(low.baseline,120);assert.equal(low.risk,routine.risk);
+const risky=trade.map((x,i)=>({...x,aqi:i===0?160:40}));assert.ok(S.optimizeDay(risky,commitments,'general','routine').risk===0);assert.equal(S.optimizeDay(trade,commitments,'general','invalid'),null);
+console.log('Personal day planner tests passed: both priorities, fixed commitments, caution-first scoring');

@@ -265,7 +265,8 @@
   }
 
   // Concentration-time proxy (µg·h/m³), not inhaled dose or health outcome.
-  function optimizeDay(hours, activities, profile) {
+  function optimizeDay(hours, activities, profile, policy='exposure') {
+    if(!['exposure','routine'].includes(policy))return null;
     if (!Array.isArray(hours) || !Array.isArray(activities) || !activities.length || activities.length > 4) return null;
     const h=hours.slice(0,24), n=h.length;
     const rows=activities.map(a=>{
@@ -275,28 +276,31 @@
         const b=h.slice(i,i+a.duration);
         if(b.length!==a.duration||!b.every((x,j)=>x&&band(x.aqi)&&Number.isFinite(x.pm2_5)&&x.pm2_5>=0&&typeof x.time==='string'&&(!j||plusHour(b[j-1].time)===x.time)))continue;
         const peak=Math.max(...b.map(x=>x.aqi)), exposure=b.reduce((s,x)=>s+x.pm2_5,0);
-        options.push({index:i,endIndex:i+a.duration,start:h[i].time,end:plusHour(b[b.length-1].time),exposure,peak,caution:effectiveLevel(peak,profile)>=2});
+        options.push({index:i,endIndex:i+a.duration,start:h[i].time,end:plusHour(b[b.length-1].time),exposure,peak,shift:Math.abs(i-a.preferred),caution:effectiveLevel(peak,profile)>=2});
       }
       return {options,baseline:options.find(x=>x.index===a.preferred)};
     });
     if(rows.some(r=>!r||!r.options.length))return null;
     const memo=new Map();
     function solve(k,end){
-      if(k===rows.length)return {risk:0,exposure:0,slots:[]};
+      if(k===rows.length)return {risk:0,exposure:0,shift:0,slots:[]};
       const key=k+':'+end;if(memo.has(key))return memo.get(key);
       let best=null;
       for(const o of rows[k].options){
         if(o.index<end)continue;
         const tail=solve(k+1,o.endIndex);if(!tail)continue;
-        const risk=Number(o.caution)+tail.risk, exposure=o.exposure+tail.exposure;
-        if(!best||risk<best.risk||(risk===best.risk&&exposure<best.exposure))best={risk,exposure,slots:[o,...tail.slots]};
+        const risk=Number(o.caution)+tail.risk, exposure=o.exposure+tail.exposure, shift=o.shift+tail.shift;
+        const score=policy==='routine'?[risk,shift,exposure]:[risk,exposure,shift];
+        const previous=best&&(policy==='routine'?[best.risk,best.shift,best.exposure]:[best.risk,best.exposure,best.shift]);
+        const better=!previous||score.some((v,i)=>v<previous[i]&&score.slice(0,i).every((n,j)=>n===previous[j]));
+        if(better)best={risk,exposure,shift,slots:[o,...tail.slots]};
       }
       memo.set(key,best);return best;
     }
     const result=solve(0,0);if(!result)return null;
     const b=rows.map(r=>r.baseline);
     const baseline=b.every((x,i)=>x&&(!i||b[i-1].endIndex<=x.index))?b.reduce((sum,x)=>sum+x.exposure,0):null;
-    return {...result,baseline,changePct:baseline>0?Math.round((baseline-result.exposure)/baseline*100):null};
+    return {...result,policy,baseline,baselineRisk:baseline===null?null:b.filter(x=>x.caution).length,changePct:baseline>0?Math.round((baseline-result.exposure)/baseline*100):null};
   }
 
 

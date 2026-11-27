@@ -266,7 +266,8 @@
   }
 
   // Concentration-time proxy (µg·h/m³), not inhaled dose or health outcome.
-  function optimizeDay(hours, activities, profile) {
+  function optimizeDay(hours, activities, profile, policy='exposure') {
+    if(!['exposure','routine'].includes(policy))return null;
     if (!Array.isArray(hours) || !Array.isArray(activities) || !activities.length || activities.length > 4) return null;
     const h=hours.slice(0,24), n=h.length;
     const rows=activities.map(a=>{
@@ -276,28 +277,31 @@
         const b=h.slice(i,i+a.duration);
         if(b.length!==a.duration||!b.every((x,j)=>x&&band(x.aqi)&&Number.isFinite(x.pm2_5)&&x.pm2_5>=0&&typeof x.time==='string'&&(!j||plusHour(b[j-1].time)===x.time)))continue;
         const peak=Math.max(...b.map(x=>x.aqi)), exposure=b.reduce((s,x)=>s+x.pm2_5,0);
-        options.push({index:i,endIndex:i+a.duration,start:h[i].time,end:plusHour(b[b.length-1].time),exposure,peak,caution:effectiveLevel(peak,profile)>=2});
+        options.push({index:i,endIndex:i+a.duration,start:h[i].time,end:plusHour(b[b.length-1].time),exposure,peak,shift:Math.abs(i-a.preferred),caution:effectiveLevel(peak,profile)>=2});
       }
       return {options,baseline:options.find(x=>x.index===a.preferred)};
     });
     if(rows.some(r=>!r||!r.options.length))return null;
     const memo=new Map();
     function solve(k,end){
-      if(k===rows.length)return {risk:0,exposure:0,slots:[]};
+      if(k===rows.length)return {risk:0,exposure:0,shift:0,slots:[]};
       const key=k+':'+end;if(memo.has(key))return memo.get(key);
       let best=null;
       for(const o of rows[k].options){
         if(o.index<end)continue;
         const tail=solve(k+1,o.endIndex);if(!tail)continue;
-        const risk=Number(o.caution)+tail.risk, exposure=o.exposure+tail.exposure;
-        if(!best||risk<best.risk||(risk===best.risk&&exposure<best.exposure))best={risk,exposure,slots:[o,...tail.slots]};
+        const risk=Number(o.caution)+tail.risk, exposure=o.exposure+tail.exposure, shift=o.shift+tail.shift;
+        const score=policy==='routine'?[risk,shift,exposure]:[risk,exposure,shift];
+        const previous=best&&(policy==='routine'?[best.risk,best.shift,best.exposure]:[best.risk,best.exposure,best.shift]);
+        const better=!previous||score.some((v,i)=>v<previous[i]&&score.slice(0,i).every((n,j)=>n===previous[j]));
+        if(better)best={risk,exposure,shift,slots:[o,...tail.slots]};
       }
       memo.set(key,best);return best;
     }
     const result=solve(0,0);if(!result)return null;
     const b=rows.map(r=>r.baseline);
     const baseline=b.every((x,i)=>x&&(!i||b[i-1].endIndex<=x.index))?b.reduce((sum,x)=>sum+x.exposure,0):null;
-    return {...result,baseline,changePct:baseline>0?Math.round((baseline-result.exposure)/baseline*100):null};
+    return {...result,policy,baseline,baselineRisk:baseline===null?null:b.filter(x=>x.caution).length,changePct:baseline>0?Math.round((baseline-result.exposure)/baseline*100):null};
   }
 
 
@@ -344,7 +348,7 @@ function recentReports(){const now=Date.now(),cutoff=now-7*86400000;return repor
 function renderReports(){
   const entries=recentReports();
   $('reportsummary').textContent=entries.length?entries.length+' saved projected schedules · '+entries.filter(x=>x.changePct>0).length+' lower than their preferred schedule.':'No saved plans yet. Optimize a day and choose Save projected schedule.';
-  $('reportlist').innerHTML=entries.map(x=>'<article class="reportentry"><h3>'+esc(x.city)+'</h3><small>'+esc(new Date(x.createdAt).toLocaleString())+'</small><p><strong>'+x.exposure.toFixed(1)+' µg·h/m³</strong> projected concentration-time proxy'+(Number.isFinite(x.changePct)?' · '+x.changePct+'% reduction versus preferred schedule':'')+'</p><p class="muted">Model forecast, not measured personal exposure.</p></article>').join('');
+  $('reportlist').innerHTML=entries.map(x=>'<article class="reportentry"><h3>'+esc(x.city)+'</h3><small>'+esc(new Date(x.createdAt).toLocaleString())+'</small><p><strong>'+x.exposure.toFixed(1)+' µg·h/m³</strong> projected concentration-time proxy'+(Number.isFinite(x.changePct)?' · '+Math.abs(x.changePct)+'% '+(x.changePct>=0?'lower':'higher')+' versus preferred schedule':'')+'</p>'+(Number.isFinite(x.shift)?'<p class="muted">'+(x.policy==='routine'?'Closer to routine':'Lower pollution')+' · '+x.shift+'h total shift</p>':'')+'<p class="muted">Model forecast, not measured personal exposure.</p></article>').join('');
   $('exportreport').disabled=!entries.length;$('clearreport').disabled=!reports.length;
 }
 $('saveplan').onclick=()=>{const plan=getPlan();if(!plan||!forecast().length)return;const next=[plan,...recentReports()].slice(0,100);if(!store.set('svasa_reports',next)){banner('Device storage unavailable. Your schedule was not saved.');return;}reports=next;invalidatePlan();renderReports();notify('Schedule saved','Your projected schedule is available in Reports.','reports');show('reports');};
@@ -869,13 +873,13 @@ $('onb').hidden = !!store.get('svasa_onb', 0);
 
 
 /* ---------- personal day and family ---------- */
-let currentPlan=null;
+let currentPlan=null,decisionPlans=null;
 let activities=[{name:'Commute',duration:1,preferred:0,flex:2}];
 let family=store.get('svasa_family',[]);
 if(!Array.isArray(family))family=[];
 family=family.filter(x=>x&&typeof x.name==='string'&&Object.hasOwn(S.PROFILES,x.profile)).slice(0,6);
 const forecast=()=>st.data&&!st.demo&&!st.stale?S.hourlyFrom(st.data,st.data.current.time):[];
-function invalidatePlan(){currentPlan=null;$('saveplan').disabled=true;}
+function invalidatePlan(){currentPlan=null;decisionPlans=null;$('saveplan').disabled=true;$('decisionchoices').hidden=true;}
 function renderActivityTimes(){
   invalidatePlan();
   const hrs=forecast(), box=$('activities');
@@ -892,13 +896,24 @@ $('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d
 $('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)return;activities.splice(Number(b.dataset.remove),1);renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('addactivity').onclick=()=>{if(activities.length>=4)return;activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('optimizeday').onclick=()=>{
-  const hrs=forecast(), items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
-  invalidatePlan();const plan=S.optimizeDay(hrs,items,st.profile);
-  if(!plan){$('dayresult').textContent='No feasible schedule with complete data. Widen time flexibility, shorten durations or change preferred times.';return;}
-  currentPlan={createdAt:new Date().toISOString(),city:st.place.name,profile:st.profile,exposure:plan.exposure,baseline:plan.baseline,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;inbox?.emit('Your day plan is ready','Review the proposed schedule and forecast limitations.','plan');
-  const change=plan.changePct==null?'Original schedule unavailable or overlapping.':(plan.changePct>=0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
-  $('dayresult').innerHTML='<p class="section-kicker">YOUR PROPOSED SCHEDULE</p><h3>'+plan.exposure.toFixed(1)+' µg·h/m³</h3><p>'+esc(change)+'</p>'+plan.slots.map((x,i)=>'<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>').join('')+(plan.risk?'<p class="alert">Some windows still need caution. Consider moving those activities indoors.</p>':'');
+  const hrs=forecast(),items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
+  invalidatePlan();const exposure=S.optimizeDay(hrs,items,st.profile,'exposure'),routine=S.optimizeDay(hrs,items,st.profile,'routine');
+  if(!exposure||!routine){$('dayresult').textContent='No feasible schedule with complete data. Widen time flexibility, shorten durations or change preferred times.';return;}
+  decisionPlans={exposure,routine,items};$('decisionchoices').hidden=false;
+  for(const [name,plan] of Object.entries({exposure,routine})){$(name+'metric').textContent=plan.exposure.toFixed(1)+' µg·h/m³';$(name+'shift').textContent=plan.shift+'h total time shifted · '+plan.risk+' caution '+(plan.risk===1?'activity':'activities');}
+  $('decisionnote').textContent=exposure.slots.every((x,i)=>x.index===routine.slots[i].index)?'Both priorities produce the same schedule with these constraints.':'Compare the pollution proxy and disruption; both options keep fixed commitments and minimize caution activities.';
+  chooseDecision('exposure');inbox?.emit('Your day plan is ready','Compare pollution and schedule disruption before saving.','plan');
 };
+function chooseDecision(policy){
+  if(!decisionPlans||!forecast().length)return;const plan=decisionPlans[policy],items=decisionPlans.items;if(!plan)return;
+  for(const k of ['exposure','routine'])$('decision'+k).setAttribute('aria-pressed',String(policy===k));
+  currentPlan={createdAt:new Date().toISOString(),city:st.place.name,profile:st.profile,policy,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
+  const change=plan.changePct==null?'Original schedule unavailable or overlapping.':(plan.changePct>=0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
+  const moved=plan.slots.map((x,i)=>{const delta=x.index-items[i].preferred;return '<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>'+ (items[i].flex===0?'Fixed commitment · ':delta===0?'Unchanged · ':Math.abs(delta)+'h '+(delta<0?'earlier':'later')+' · ')+'Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>';}).join('');
+  const baseline=plan.baseline===null?'Preferred schedule unavailable':plan.baseline.toFixed(1)+' µg·h/m³';
+  $('dayresult').innerHTML='<p class="section-kicker">YOUR PROPOSED SCHEDULE</p><h3>'+plan.exposure.toFixed(1)+' µg·h/m³</h3><p>'+esc(change)+'</p><div class="decisionbaseline"><div><small>Preferred schedule</small><strong>'+esc(baseline)+'</strong></div><div><small>Total time shifted</small><strong>'+plan.shift+'h</strong></div><div><small>Caution activities</small><strong>'+plan.risk+(plan.baselineRisk===null?'':' / '+plan.baselineRisk+' before')+'</strong></div></div>'+moved+(plan.risk?'<p class="healthadvisory">Some windows still need caution. Consider moving those activities indoors.</p>':'');
+}
+$('decisionexposure').onclick=()=>chooseDecision('exposure');$('decisionroutine').onclick=()=>chooseDecision('routine');
 function renderFamily(){
   const box=$('familyresults'), live=st.data&&!st.demo&&!st.stale;
   box.innerHTML=family.length?family.map((x,i)=>'<article class="familymember"><p class="section-kicker">'+esc(S.PROFILES[x.profile].name)+'</p><h3>'+esc(x.name)+'</h3><p>'+esc(live?S.advice(st.data.current.us_aqi,x.profile).go:'Fresh data required for current advice.')+'</p><button type="button" class="btn ghost sm" data-family-use="'+i+'">Use profile</button> <button type="button" class="btn ghost sm" data-family-remove="'+i+'">Remove</button></article>').join(''):'<p class="muted">Add a profile to see personalized guidance here.</p>';
