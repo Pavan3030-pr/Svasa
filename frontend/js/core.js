@@ -307,18 +307,21 @@
     const readings=new Map();
     for(let i=0;i<times.length;i++){
       const t=Date.parse(times[i]+'Z'),v=values[i];
-      if(Number.isFinite(t)&&t<=end&&t>end-hours*3600000&&Number.isFinite(v)&&v>=0)readings.set(t,v);
+      if(Number.isFinite(t)&&t%3600000===0&&t<=end&&t>end-hours*3600000&&Number.isFinite(v)&&v>=0)readings.set(t,v);
     }
     if(readings.size<minHours)return null;
     return {mean:[...readings.values()].reduce((s,v)=>s+v,0)/readings.size,count:readings.size};
   }
-  // Partial Indian scale model estimate: only the four 24-hour pollutant components.
-  // Not official CPCB AQI; ozone, CO, ammonia and lead are not included.
+  // Partial Indian-scale model estimate: four 24-hour and two 8-hour components.
+  // Model samples are not monitoring-station measurements; NH3 and Pb are unavailable for India.
   function indiaModel24(data,until){
     const averages={},coverage={};
     for(const k of ['pm2_5','pm10','nitrogen_dioxide','sulphur_dioxide']){
       const m=historicalMean(data,k,until,24,16);
       if(m){averages[k]=m.mean;coverage[k]=m.count;}
+    }
+    for(const k of ['ozone','carbon_monoxide']){
+      const m=historicalMean(data,k,until,8,8);if(m){averages[k]=m.mean;coverage[k]=m.count;}
     }
     if(Object.keys(averages).length<3||(!Object.hasOwn(averages,'pm2_5')&&!Object.hasOwn(averages,'pm10')))return null;
     const result=indiaAqi(averages);

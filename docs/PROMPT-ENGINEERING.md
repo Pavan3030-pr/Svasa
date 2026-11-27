@@ -16,4 +16,4 @@ Run npm test for deterministic regression cases, including 100 contract and mult
 
 ## Remaining infrastructure
 
-Shared Redis rate limiting is optional and needs server-side environment variables. True background push is not implemented. The UI accurately identifies alerts as in-app only. Official CPCB AQI is not claimed: the displayed Indian-scale value is a partial atmospheric model estimate.
+Shared Redis rate limiting is optional and needs server-side environment variables. Optional daily background push is implemented but requires Redis and opted-in subscriptions. In-app alerts remain available independently. Official CPCB AQI is not claimed: the displayed Indian-scale value is a partial atmospheric model estimate.

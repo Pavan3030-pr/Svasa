@@ -40,7 +40,7 @@ async function load(p) {
   const weather=jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`,5000).then(x=>x.current).catch(()=>null);
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
   try {
-    const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5,pm10,nitrogen_dioxide,sulphur_dioxide&forecast_days=2&past_days=7&timezone=auto`);
+    const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5,pm10,nitrogen_dioxide,sulphur_dioxide,ozone,carbon_monoxide&forecast_days=2&past_days=7&timezone=auto`);
     if (seq !== loadSequence) return;
     if (!d.current || !S.band(d.current.us_aqi)) throw new Error('No data for this location yet');
     const age=S.readingAge(d);if(age===null||age>3||age< -1)throw new Error('Provider reading is stale or has no valid timestamp');

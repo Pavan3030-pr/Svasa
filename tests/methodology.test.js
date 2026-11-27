@@ -4,6 +4,9 @@ const time=Array.from({length:24},(_,i)=>'2026-11-26T'+String(i).padStart(2,'0')
 const series=n=>Array(24).fill(n);const data={hourly:{time,pm2_5:series(45),pm10:series(75),nitrogen_dioxide:series(20)}};
 assert.equal(S.historicalMean(data,'pm2_5',until,24).mean,45);
 assert.equal(S.indiaModel24(data,until).aqi,75);
+const six={hourly:{...data.hourly,ozone:series(150),carbon_monoxide:series(6000)}};
+const estimate=S.indiaModel24(six,until);assert.equal(estimate.dominant,'ozone');assert.equal(estimate.coverage.ozone,8);assert.equal(estimate.coverage.carbon_monoxide,8);assert.equal(estimate.partial,true);
+six.hourly.ozone[23]=null;assert.equal(S.indiaModel24(six,until).dominant,'carbon_monoxide');
 assert.equal(S.indiaModel24({hourly:{time,pm2_5:series(45)}},until),null);
 data.hourly.pm2_5.splice(0,9,...Array(9).fill(null));
 assert.equal(S.historicalMean(data,'pm2_5',until,24,16),null);assert.equal(S.indiaModel24(data,until),null);
