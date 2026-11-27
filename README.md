@@ -9,28 +9,41 @@ SVASA turns air-quality forecasts into practical, constraint-aware outdoor decis
 ## Application gallery
 
 <!-- SVASA_GALLERY_START -->
-The original screenshots are restored below while the new verified browser capture workflow publishes the updated interface. These images are from an earlier release; see the [latest browser evidence](https://github.com/Pavan3030-pr/Svasa/actions) for current captures.
+Actual application UI captured by automated Chromium on commit 65c5a67. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46017407630).
 
-### Landing page
-![SVASA landing page](docs/screenshots/landing.png)
+### Landing experience
+![SVASA landing page](docs/screenshots/current/landing-desktop.png)
 
-### Air-quality dashboard
-![SVASA dashboard](docs/screenshots/today.png)
+### Personal air dashboard
+![Dashboard with air quality and decision rail](docs/screenshots/current/dashboard-desktop.png)
 
-| Day planner | Forecast |
+### Parallel Futures — compare two routines
+![Personal air decision workspace](docs/screenshots/current/planner-desktop.png)
+
+![Side-by-side original and optimized exposure projections](docs/screenshots/current/parallel-futures.png)
+
+| Adaptive Day | AirTrust |
 |:---:|:---:|
-| ![Planner](docs/screenshots/planner.png) | ![Forecast](docs/screenshots/forecast.png) |
+| ![Adaptive day forecast review](docs/screenshots/current/adaptive-day.png) | ![AirTrust evidence quality](docs/screenshots/current/airtrust.png) |
 
-| AI assistant | City comparison |
+### Family Protection
+![Shared forecast window and family profiles](docs/screenshots/current/family-protection.png)
+
+### Impact Ledger
+![Saved plans and self-reported completion](docs/screenshots/current/impact-ledger.png)
+
+| Forecast | AI assistant |
 |:---:|:---:|
-| ![Assistant](docs/screenshots/assistant.png) | ![Cities](docs/screenshots/cities.png) |
+| ![Hourly and historical forecast](docs/screenshots/current/forecast-desktop.png) | ![Multilingual assistant with safety bypass](docs/screenshots/current/assistant-desktop.png) |
 
-### Guided breathing
-![Breathing view](docs/screenshots/breathe.png)
-
-| Mobile landing | Mobile dashboard |
+| City comparison | Guided breathing |
 |:---:|:---:|
-| <img src="docs/screenshots/landing-mobile.png" width="300" alt="Mobile landing page"> | <img src="docs/screenshots/today-mobile.png" width="300" alt="Mobile dashboard"> |
+| ![City comparison view](docs/screenshots/current/cities-desktop.png) | ![Guided breathing view](docs/screenshots/current/breathe-desktop.png) |
+
+### Responsive mobile experience
+| Landing | Dashboard | Planner |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/current/landing-mobile.png" width="280" alt="Mobile landing"> | <img src="docs/screenshots/current/dashboard-mobile.png" width="280" alt="Mobile dashboard"> | <img src="docs/screenshots/current/planner-mobile.png" width="280" alt="Mobile planner"> |
 <!-- SVASA_GALLERY_END -->
 
 ## What makes SVASA different
