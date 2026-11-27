@@ -230,19 +230,21 @@ function pushMsg(role, text, cls) {
 }
 const pay = () => ({ aqi: st.ctx.aqi, city: st.ctx.city, profile: st.ctx.profile, dominant: st.ctx.dominant, trend: st.ctx.trend, window: st.ctx.window, wx: st.ctx.wx, lang: st.lang, hist: st.hist });
 async function viaServer(q) {
-  const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q, ctx: pay() }) });
+  const r = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q, place:{lat:st.place.lat,lon:st.place.lon},ctx:{profile:st.profile,lang:st.lang,hist:st.hist} }) });
   if (!r.ok) throw new Error('server ' + r.status);
-  return (await r.json()).answer;
+  return await r.json();
 }
 async function ask(q, en) {
   q = S.cleanQuery(q); if (!q || busy) return;
   pushMsg('u', q);
   const sf = S.safety(q, st.lang); if (sf) { pushMsg('a', sf, 'urgent'); return; }
   if (!st.ctx || st.demo || st.stale) { pushMsg('a', 'Search a city first and I will answer from its live air data.'); return; }
-  busy = true; const fb = S.answer(en || q, st.ctx), t = pushMsg('a', 'Thinking…', 'typing'); let a = null;
-  if (location.protocol.startsWith('http')) { try { a = await viaServer(q); } catch (_) {} }
-  t.textContent = a || fb; t.classList.remove('typing'); $('log').scrollTop = $('log').scrollHeight;
-  st.hist = st.hist.concat([{ r: 'u', t: q }, { r: 'a', t: a || fb }]).slice(-8); busy = false;
+  busy = true; const requestSeq=loadSequence, requestProfile=st.profile, requestLang=st.lang; const fb = S.answer(en || q, st.ctx), t = pushMsg('a', 'Thinking…', 'typing'); let result = null;
+  if (location.protocol.startsWith('http')) { try { result = await viaServer(q); } catch (_) {} }
+  if(requestSeq!==loadSequence||requestProfile!==st.profile||requestLang!==st.lang){t.textContent='Context changed. Please ask again.';t.classList.remove('typing');busy=false;return;}
+  const a=result&&result.answer; const text=a||('Local rule-based fallback (English; model data): '+fb);
+  t.textContent=text; t.classList.remove('typing'); t.dataset.source=result&&result.source||'local'; $('log').scrollTop = $('log').scrollHeight;
+  st.hist=st.hist.concat([{r:'u',t:q},{r:'a',t:text}]).slice(-8);busy=false;
 }
 
 /* ---------- alerts ---------- */

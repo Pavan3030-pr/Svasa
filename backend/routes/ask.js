@@ -1,5 +1,6 @@
 'use strict';
 const S = require('../../frontend/js/core.js'), g = require('../lib/guard'), gemini = require('../lib/gemini');
+const air = require('../lib/air-context');
 let inflight = 0;
 const R = (status, body, headers) => ({ status, body, headers });
 module.exports = async function ask(req) {
@@ -12,14 +13,15 @@ module.exports = async function ask(req) {
   if (!b || typeof b !== 'object') return R(400, { error: 'Invalid JSON' });
   const q = S.cleanQuery(b.q);
   const sf = S.safety(b.q, b.ctx && b.ctx.lang); if (sf) return R(200, { answer: sf, source: 'safety' });
-  const ctx = S.validateCtx(b.ctx);
-  if (!ctx || !q) return R(400, { error: 'Missing or invalid question or air data' });
+  if (!q || !air.coordinates(b.place)) return R(400, {error:'Question and valid coordinates required'});
   if (inflight >= 20) return R(503, { error: 'Busy, try again' });
   inflight++;
   try {
+    let ctx;
+    try { ctx=await air.verifiedContext(b.place,b.ctx&&b.ctx.profile,b.ctx&&b.ctx.lang,b.ctx&&b.ctx.hist); } catch (_) { return R(503,{error:'Verified air data unavailable'}); }
     const r = await gemini.generate(q, ctx);
     if (r.error) return R(r.status, { error: r.error });
     if (S.isOffTopic(r.text)) return R(200, { answer: 'I can only help with air quality, health and outdoor planning.', source: 'offtopic' });
-    return R(200, { answer: r.text + '\n' + S.sources(ctx, ctx.lang), source: 'gemini' });
+    return R(200, { answer: r.text + '\n' + S.sources(ctx, ctx.lang) + ' (UTC) · Open-Meteo / CAMS · ' + ctx.observedAt, source: 'gemini', evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window} });
   } catch (e) { return R(502, { error: 'AI request failed' }); } finally { inflight--; }
 };
