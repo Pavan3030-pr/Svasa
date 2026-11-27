@@ -36,8 +36,7 @@ const live=async p=>{await p.waitForFunction(()=>document.querySelector('#hero .
       });
       await cdp.send('ServiceWorker.deliverPushMessage',{origin,registrationId:registration,data:JSON.stringify({title:'Svasa · Test notification',body:'Automated simulated push display check'})});
       await p.waitForFunction(async()=>{const r=await navigator.serviceWorker.ready;return (await r.getNotifications({tag:'svasa-background'})).some(n=>n.title==='Svasa · Test notification'&&n.body==='Automated simulated push display check');},{},{timeout:15000});
-      await p.locator('#pushreceived').waitFor({timeout:10000});
-      assert.match(await p.locator('#pushstatus').textContent(),/browser displayed a test notification/);
+      await p.locator('#notificationbell').click();await p.getByText('Automated simulated push display check',{exact:true}).waitFor({timeout:15000});await p.locator('#notificationread').click();assert.match(await p.locator('#notificationbell').getAttribute('aria-label'),/0 unread/);await p.locator('#notificationclose').click();await p.locator('#pushreceived').scrollIntoViewIfNeeded();await p.locator('#pushreceived').waitFor({timeout:10000});assert.match(await p.locator('#pushstatus').textContent(),/browser displayed a test notification/);
       assert.equal(await p.evaluate(()=>localStorage.getItem('svasa_push_receipt')),null,'Do not create a false human receipt');
       await p.evaluate(async()=>{const r=await navigator.serviceWorker.ready;for(const n of await r.getNotifications({tag:'svasa-background'}))n.close();});
       return {browserDisplay:'verified',transport:'Chromium simulated push, not external provider or physical device',humanReceipt:false};

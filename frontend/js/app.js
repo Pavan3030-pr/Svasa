@@ -7,7 +7,7 @@ const WX = 'https://api.open-meteo.com/v1/forecast';
 const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask', 'family', 'reports'];
 const st = { profile: 'general', place: null, data: null, wx: null, demo: false, stale: null, ctx: null, lang: 'en', hist: [], serverAI: false };
 let capabilities=null;
-let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer;
+let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer, inbox=null;
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = {
@@ -220,6 +220,7 @@ window.addEventListener('unhandledrejection', () => banner('Something went wrong
 function plan() {
   if (!st.data || st.demo || st.stale) { $('planout').textContent = 'Fresh live forecast required for planning.'; return; }
   const hrs = S.hourlyFrom(st.data, st.data.current.time), len = +$('dur').value, p = S.planTrip(hrs, len, +$('from').value, +$('to').value);
+  if(p)inbox?.emit('Commute window ready','A forecast-based lower-pollution time window is available.','plan');
   $('planout').textContent = !p ? 'No clean slot fits inside that time range. Try widening it.'
     : `Lowest forecast average: ${p.win.start.replace('T',' ')} to ${p.win.end.replace('T',' ')} (AQI ${p.win.avg}; peak ${p.win.peak}). ${p.savedPct == null ? '' : p.savedPct + '% lower mean AQI than starting now. '}${S.effectiveLevel(p.win.peak,st.profile)>=2?'Consider an indoor alternative; even this window may be unsuitable.':'Conditions may change; check again before leaving.'}`;
 }
@@ -265,8 +266,10 @@ async function show_(t, b) {
 }
 function notifyCheck(aqi) {
   const l = S.effectiveLevel(aqi, st.profile), thr = +($('thr').value || 2);
-  if (alertsOn && lastLvl !== null && l !== lastLvl && (l >= thr || lastLvl >= thr))
-    show_('Air quality ' + (l > lastLvl ? 'worsened' : 'improved') + ' in ' + st.place.name, 'AQI ' + Math.round(aqi) + ': ' + S.band(aqi).label + (l > lastLvl ? '. ' + S.advice(aqi, st.profile).go : ''));
+  if ((lastLvl===null&&l>=thr)||(lastLvl!==null&&l!==lastLvl&&(l>=thr||lastLvl>=thr))){
+    const title=(lastLvl===null?'Air quality advisory':l>lastLvl?'Air quality worsened':'Air quality improved')+' · '+st.place.name,body='Modelled US AQI '+Math.round(aqi)+': '+S.band(aqi).label+'. '+S.advice(aqi,st.profile).go;
+    inbox?.emit(title,body,'today');if(alertsOn&&lastLvl!==null)show_(title,body);
+  }
   lastLvl = l;
 }
 
@@ -293,7 +296,7 @@ function breatheStep() {
   $('bphase').textContent = n; o.style.setProperty('--d', ms + 'ms'); o.className = 'orb ' + (n === 'Exhale' ? 'out' : 'in');
   bTimer = setTimeout(() => { bPhase = (bPhase + 1) % PH.length; if (bPhase === 0) { bCycles++; $('bcount').textContent = bCycles + (bCycles === 1 ? ' cycle' : ' cycles'); } breatheStep(); }, ms);
 }
-$('bstart').onclick = () => { if (bTimer) { breatheStop(); return; } bPhase = 0; bCycles = 0; $('bcount').textContent = '0 cycles'; $('bstart').textContent = 'Stop'; breatheStep(); };
+$('bstart').onclick = () => { if (bTimer) { const completed=bCycles;breatheStop();if(completed)inbox?.emit('Breathing session complete',completed+' completed breathing '+(completed===1?'cycle':'cycles')+'.','breathe');return; } bPhase = 0; bCycles = 0; $('bcount').textContent = '0 cycles'; $('bstart').textContent = 'Stop'; breatheStep(); };
 
 /* ---------- router ---------- */
 function show(v) {
@@ -341,7 +344,8 @@ $('addc').onclick = () => { if (!st.place || st.demo || cmp.some(c => c.name ===
 $('clrc').onclick = () => { cmp = []; store.set('svasa_cmp', []); drawCities(); };
 $('notif').onclick = async () => {
   if (!('Notification' in window)) { $('notif').textContent = 'Alerts unsupported'; return; }
-  alertsOn = (await Notification.requestPermission()) === 'granted'; $('notif').textContent = alertsOn ? 'Alerts on' : 'Alerts blocked';
+  if(alertsOn){alertsOn=false;store.set('svasa_device_alerts',false);$('notif').textContent='Enable device alerts while open';return;}
+  alertsOn = (await Notification.requestPermission()) === 'granted';store.set('svasa_device_alerts',alertsOn);$('notif').textContent = alertsOn ? 'Disable device alerts while open' : 'Device alerts blocked';if(alertsOn){inbox?.emit('Device alerts enabled','Air-quality changes can now appear as device notifications while Svasa is open.','today');show_('Svasa · Device alerts enabled','You can manage alerts from the notification bell.');}
 };
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('inst').hidden = false; });
 $('inst').onclick = async () => { if (deferredInstall) { deferredInstall.prompt(); deferredInstall = null; $('inst').hidden = true; } };
@@ -388,7 +392,7 @@ $('optimizeday').onclick=()=>{
   const hrs=forecast(), items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
   invalidatePlan();const plan=S.optimizeDay(hrs,items,st.profile);
   if(!plan){$('dayresult').textContent='No feasible schedule with complete data. Widen time flexibility, shorten durations or change preferred times.';return;}
-  currentPlan={createdAt:new Date().toISOString(),city:st.place.name,profile:st.profile,exposure:plan.exposure,baseline:plan.baseline,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
+  currentPlan={createdAt:new Date().toISOString(),city:st.place.name,profile:st.profile,exposure:plan.exposure,baseline:plan.baseline,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;inbox?.emit('Your day plan is ready','Review the proposed schedule and forecast limitations.','plan');
   const change=plan.changePct==null?'Original schedule unavailable or overlapping.':(plan.changePct>=0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
   $('dayresult').innerHTML='<p class="section-kicker">YOUR PROPOSED SCHEDULE</p><h3>'+plan.exposure.toFixed(1)+' µg·h/m³</h3><p>'+esc(change)+'</p>'+plan.slots.map((x,i)=>'<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>').join('')+(plan.risk?'<p class="alert">Some windows still need caution. Consider moving those activities indoors.</p>':'');
 };
@@ -397,12 +401,14 @@ function renderFamily(){
   box.innerHTML=family.length?family.map((x,i)=>'<article class="familymember"><p class="section-kicker">'+esc(S.PROFILES[x.profile].name)+'</p><h3>'+esc(x.name)+'</h3><p>'+esc(live?S.advice(st.data.current.us_aqi,x.profile).go:'Fresh data required for current advice.')+'</p><button type="button" class="btn ghost sm" data-family-use="'+i+'">Use profile</button> <button type="button" class="btn ghost sm" data-family-remove="'+i+'">Remove</button></article>').join(''):'<p class="muted">Add a profile to see personalized guidance here.</p>';
 }
 $('familyprofile').innerHTML=Object.entries(S.PROFILES).map(([k,v])=>'<option value="'+k+'">'+esc(v.name)+'</option>').join('');
-$('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value.trim(),profile=$('familyprofile').value;if(!name||family.length>=6||!Object.hasOwn(S.PROFILES,profile)){banner('Add a nickname; up to six profiles are supported.');return;}family.push({name,profile});store.set('svasa_family',family);$('familyname').value='';renderFamily();};
+$('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value.trim(),profile=$('familyprofile').value;if(!name||family.length>=6||!Object.hasOwn(S.PROFILES,profile)){banner('Add a nickname; up to six profiles are supported.');return;}const next=[...family,{name,profile}];if(!store.set('svasa_family',next)){banner('Could not save family profile on this device.');return;}family=next;$('familyname').value='';renderFamily();inbox?.emit('Family profile added','Your family guidance is ready on this device.','family');};
 $('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){family.splice(Number(b.dataset.familyRemove),1);store.set('svasa_family',family);renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;st.profile=x.profile;$('profile').value=x.profile;if(st.data)render();show('today');}};
 $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderFamily();};
 // Populate non-visible feature views only when opened.
 
-window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,show,banner});
+inbox=window.SvasaInbox.init({$,store,show});
+alertsOn=!!store.get('svasa_device_alerts',false)&&'Notification'in window&&Notification.permission==='granted';if(alertsOn)$('notif').textContent='Disable device alerts while open';
+window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,show,banner,notify:(...args)=>inbox.emit(...args)});
 window.SvasaPushUI.init({$,store,st});
 
 /* ---------- boot ---------- */

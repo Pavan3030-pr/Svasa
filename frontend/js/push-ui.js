@@ -1,3 +1,30 @@
+/* Local notification inbox: no account, no remote event tracking. */
+(function(root){'use strict';root.SvasaInbox={init({$,store,show}){
+ const key='svasa_inbox_v1',cacheName='svasa-inbox-v1',views=new Set(['today','hourly','plan','cities','breathe','ask','family','reports']),day=86400000,dialog=$('notificationcenter');
+ let state={items:[],clearedAt:0};
+ const valid=x=>x&&typeof x.id==='string'&&x.id.length<=100&&typeof x.title==='string'&&typeof x.body==='string'&&Number.isFinite(x.at)&&x.at>Date.now()-7*day&&x.at<=Date.now()+60000&&views.has(x.view);
+ function read(){const x=store.get(key,null);if(!x||!Array.isArray(x.items))return {items:[],clearedAt:0};const clearedAt=Number.isFinite(x.clearedAt)?x.clearedAt:0;return {items:x.items.filter(valid).filter(e=>e.at>clearedAt).sort((a,b)=>b.at-a.at).slice(0,50),clearedAt};}
+ state=read();
+ function paint(){const n=state.items.filter(x=>!x.read).length;$('notificationcount').textContent=n>99?'99+':String(n);$('notificationcount').hidden=!n;$('notificationbell').setAttribute('aria-label','Notifications, '+n+' unread');if(!dialog.open)return;
+  $('notificationempty').hidden=!!state.items.length;$('notificationread').disabled=!n;$('notificationclear').disabled=!state.items.length;
+  const list=$('notificationlist'),frag=document.createDocumentFragment();for(const x of state.items){const b=document.createElement('button'),dot=document.createElement('span'),copy=document.createElement('span'),title=document.createElement('strong'),body=document.createElement('span'),time=document.createElement('small');b.type='button';b.className='notificationitem';b.dataset.id=x.id;b.dataset.unread=String(!x.read);dot.className='notificationdot';dot.setAttribute('aria-hidden','true');title.textContent=x.title;body.className='notificationbody';body.textContent=x.body;time.textContent=new Date(x.at).toLocaleString();copy.append(title,body,time);b.append(dot,copy);frag.append(b);}list.replaceChildren(frag);
+ }
+ function save(){if(!store.set(key,state))$('notificationstatus').textContent='History cannot be saved on this device.';paint();}
+ function add(entry){if(!valid(entry)||entry.at<=state.clearedAt||state.items.some(x=>x.id===entry.id))return false;state.items=[{...entry,title:entry.title.slice(0,100),body:entry.body.slice(0,240),read:false},...state.items].filter(valid).sort((a,b)=>b.at-a.at).slice(0,50);save();return true;}
+ function emit(title,body,view='today'){const now=Date.now();if(state.items.some(x=>x.title===title&&x.body===body&&now-x.at<30000))return;add({id:crypto.randomUUID(),title,body,view,at:now});}
+ async function sync(){if(!('caches'in root))return;try{if(!await caches.has(cacheName))return;const cache=await caches.open(cacheName);const keys=(await cache.keys()).slice(-50);for(const k of keys){const response=await cache.match(k);if(!response)continue;const entry=await response.json();if(add(entry)&&entry.title==='Svasa · Test notification'){ $('pushreceived').hidden=false;$('pushstatus').textContent='The browser displayed a test notification. Confirm only if you saw it.';}}}catch(_){}}
+ $('notificationbell').onclick=()=>{dialog.showModal();$('notificationbell').setAttribute('aria-expanded','true');paint();sync();};
+ $('notificationclose').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{$('notificationbell').setAttribute('aria-expanded','false');$('notificationbell').focus();});dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
+ $('notificationread').onclick=()=>{state.items=state.items.map(x=>({...x,read:true}));save();};
+ $('notificationclear').onclick=()=>{state={items:[],clearedAt:Date.now()};save();};
+ $('notificationlist').onclick=e=>{const b=e.target.closest('button[data-id]'),x=b&&state.items.find(v=>v.id===b.dataset.id);if(!x)return;x.read=true;save();dialog.close();show(x.view);};
+ $('notificationsettings').onclick=()=>{dialog.close();show('today');$('notif').scrollIntoView({block:'center'});$('notif').focus();};
+ root.addEventListener('storage',e=>{if(e.key===key){state=read();paint();}});
+ root.addEventListener('focus',sync);document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync();});
+ if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-inbox-update')sync();});
+ paint();sync();return {emit,sync};
+}};})(window);
+
 /* Optional background alerts; no tracking or permission prompt before user action. */
 (function(root){'use strict';root.SvasaPushUI={init({$,store,st}){
 /* Optional opt-in Web Push. No background location tracking. */

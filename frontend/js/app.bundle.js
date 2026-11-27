@@ -335,7 +335,7 @@
 
 ;
 /* Reports and local usability data; no network requests. */
-(function(root){'use strict';root.SvasaReports={init({$,store,esc,forecast,getPlan,invalidatePlan,show,banner}){
+(function(root){'use strict';root.SvasaReports={init({$,store,esc,forecast,getPlan,invalidatePlan,show,banner,notify}){
 let reports=store.get('svasa_reports',[]);
 if(!Array.isArray(reports))reports=[];
 function recentReports(){const now=Date.now(),cutoff=now-7*86400000;return reports.filter(x=>x&&Date.parse(x.createdAt)>=cutoff&&Date.parse(x.createdAt)<=now+60000&&Number.isFinite(x.exposure)&&x.exposure>=0&&typeof x.city==='string').slice(0,100);}
@@ -345,7 +345,7 @@ function renderReports(){
   $('reportlist').innerHTML=entries.map(x=>'<article class="reportentry"><h3>'+esc(x.city)+'</h3><small>'+esc(new Date(x.createdAt).toLocaleString())+'</small><p><strong>'+x.exposure.toFixed(1)+' µg·h/m³</strong> projected concentration-time proxy'+(Number.isFinite(x.changePct)?' · '+x.changePct+'% reduction versus preferred schedule':'')+'</p><p class="muted">Model forecast, not measured personal exposure.</p></article>').join('');
   $('exportreport').disabled=!entries.length;$('clearreport').disabled=!reports.length;
 }
-$('saveplan').onclick=()=>{const plan=getPlan();if(!plan||!forecast().length)return;const next=[plan,...recentReports()].slice(0,100);if(!store.set('svasa_reports',next)){banner('Device storage unavailable. Your schedule was not saved.');return;}reports=next;invalidatePlan();renderReports();show('reports');};
+$('saveplan').onclick=()=>{const plan=getPlan();if(!plan||!forecast().length)return;const next=[plan,...recentReports()].slice(0,100);if(!store.set('svasa_reports',next)){banner('Device storage unavailable. Your schedule was not saved.');return;}reports=next;invalidatePlan();renderReports();notify('Schedule saved','Your projected schedule is available in Reports.','reports');show('reports');};
 $('clearreport').onclick=()=>{if(!store.set('svasa_reports',[])){banner('Could not clear saved plans. Check browser storage.');return;}reports=[];renderReports();};
 $('exportreport').onclick=()=>{const data={method:'Projected outdoor PM2.5 concentration × hours; not actual exposure or inhaled dose',plans:recentReports()};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-projected-plans.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 renderReports();
@@ -353,7 +353,7 @@ renderReports();
 /* Optional local-only usability evidence. No analytics or remote submission. */
 let feedback=store.get('svasa_feedback',[]);if(!Array.isArray(feedback))feedback=[];
 function renderFeedback(){const n=feedback.length;$('feedbacksummary').textContent=n?n+' local responses saved. Export only if you choose to share them.':'No feedback submitted on this device.';$('exportfeedback').disabled=!n;$('clearfeedback').disabled=!n;}
-$('feedbackform').onsubmit=e=>{e.preventDefault();const task=$('feedbacktask').value,trust=$('feedbacktrust').value,ease=Number($('feedbackease').value);if(!['yes','partly','no'].includes(task)||!['yes','partly','no'].includes(trust)||!Number.isInteger(ease)||ease<1||ease>5)return;const next=[{task,trust,ease},...feedback].slice(0,100);if(!store.set('svasa_feedback',next)){$('feedbacksummary').textContent='Device storage unavailable; feedback not saved.';return;}feedback=next;e.target.reset();renderFeedback();};
+$('feedbackform').onsubmit=e=>{e.preventDefault();const task=$('feedbacktask').value,trust=$('feedbacktrust').value,ease=Number($('feedbackease').value);if(!['yes','partly','no'].includes(task)||!['yes','partly','no'].includes(trust)||!Number.isInteger(ease)||ease<1||ease>5)return;const next=[{task,trust,ease},...feedback].slice(0,100);if(!store.set('svasa_feedback',next)){$('feedbacksummary').textContent='Device storage unavailable; feedback not saved.';return;}feedback=next;e.target.reset();renderFeedback();notify('Feedback saved','Your response stays on this device until you choose to export it.','reports');};
 $('exportfeedback').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({method:'Optional self-reported usability responses; local device; no clinical outcomes',responses:feedback},null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-usability-feedback.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 $('clearfeedback').onclick=()=>{if(!store.set('svasa_feedback',[])){$('feedbacksummary').textContent='Feedback could not be cleared from device storage.';return;}feedback=[];renderFeedback();};renderFeedback();
 
@@ -361,6 +361,33 @@ $('clearfeedback').onclick=()=>{if(!store.set('svasa_feedback',[])){$('feedbacks
 }};})(window);
 
 ;
+/* Local notification inbox: no account, no remote event tracking. */
+(function(root){'use strict';root.SvasaInbox={init({$,store,show}){
+ const key='svasa_inbox_v1',cacheName='svasa-inbox-v1',views=new Set(['today','hourly','plan','cities','breathe','ask','family','reports']),day=86400000,dialog=$('notificationcenter');
+ let state={items:[],clearedAt:0};
+ const valid=x=>x&&typeof x.id==='string'&&x.id.length<=100&&typeof x.title==='string'&&typeof x.body==='string'&&Number.isFinite(x.at)&&x.at>Date.now()-7*day&&x.at<=Date.now()+60000&&views.has(x.view);
+ function read(){const x=store.get(key,null);if(!x||!Array.isArray(x.items))return {items:[],clearedAt:0};const clearedAt=Number.isFinite(x.clearedAt)?x.clearedAt:0;return {items:x.items.filter(valid).filter(e=>e.at>clearedAt).sort((a,b)=>b.at-a.at).slice(0,50),clearedAt};}
+ state=read();
+ function paint(){const n=state.items.filter(x=>!x.read).length;$('notificationcount').textContent=n>99?'99+':String(n);$('notificationcount').hidden=!n;$('notificationbell').setAttribute('aria-label','Notifications, '+n+' unread');if(!dialog.open)return;
+  $('notificationempty').hidden=!!state.items.length;$('notificationread').disabled=!n;$('notificationclear').disabled=!state.items.length;
+  const list=$('notificationlist'),frag=document.createDocumentFragment();for(const x of state.items){const b=document.createElement('button'),dot=document.createElement('span'),copy=document.createElement('span'),title=document.createElement('strong'),body=document.createElement('span'),time=document.createElement('small');b.type='button';b.className='notificationitem';b.dataset.id=x.id;b.dataset.unread=String(!x.read);dot.className='notificationdot';dot.setAttribute('aria-hidden','true');title.textContent=x.title;body.className='notificationbody';body.textContent=x.body;time.textContent=new Date(x.at).toLocaleString();copy.append(title,body,time);b.append(dot,copy);frag.append(b);}list.replaceChildren(frag);
+ }
+ function save(){if(!store.set(key,state))$('notificationstatus').textContent='History cannot be saved on this device.';paint();}
+ function add(entry){if(!valid(entry)||entry.at<=state.clearedAt||state.items.some(x=>x.id===entry.id))return false;state.items=[{...entry,title:entry.title.slice(0,100),body:entry.body.slice(0,240),read:false},...state.items].filter(valid).sort((a,b)=>b.at-a.at).slice(0,50);save();return true;}
+ function emit(title,body,view='today'){const now=Date.now();if(state.items.some(x=>x.title===title&&x.body===body&&now-x.at<30000))return;add({id:crypto.randomUUID(),title,body,view,at:now});}
+ async function sync(){if(!('caches'in root))return;try{if(!await caches.has(cacheName))return;const cache=await caches.open(cacheName);const keys=(await cache.keys()).slice(-50);for(const k of keys){const response=await cache.match(k);if(!response)continue;const entry=await response.json();if(add(entry)&&entry.title==='Svasa · Test notification'){ $('pushreceived').hidden=false;$('pushstatus').textContent='The browser displayed a test notification. Confirm only if you saw it.';}}}catch(_){}}
+ $('notificationbell').onclick=()=>{dialog.showModal();$('notificationbell').setAttribute('aria-expanded','true');paint();sync();};
+ $('notificationclose').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{$('notificationbell').setAttribute('aria-expanded','false');$('notificationbell').focus();});dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
+ $('notificationread').onclick=()=>{state.items=state.items.map(x=>({...x,read:true}));save();};
+ $('notificationclear').onclick=()=>{state={items:[],clearedAt:Date.now()};save();};
+ $('notificationlist').onclick=e=>{const b=e.target.closest('button[data-id]'),x=b&&state.items.find(v=>v.id===b.dataset.id);if(!x)return;x.read=true;save();dialog.close();show(x.view);};
+ $('notificationsettings').onclick=()=>{dialog.close();show('today');$('notif').scrollIntoView({block:'center'});$('notif').focus();};
+ root.addEventListener('storage',e=>{if(e.key===key){state=read();paint();}});
+ root.addEventListener('focus',sync);document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync();});
+ if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-inbox-update')sync();});
+ paint();sync();return {emit,sync};
+}};})(window);
+
 /* Optional background alerts; no tracking or permission prompt before user action. */
 (function(root){'use strict';root.SvasaPushUI={init({$,store,st}){
 /* Optional opt-in Web Push. No background location tracking. */
@@ -420,7 +447,7 @@ const WX = 'https://api.open-meteo.com/v1/forecast';
 const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask', 'family', 'reports'];
 const st = { profile: 'general', place: null, data: null, wx: null, demo: false, stale: null, ctx: null, lang: 'en', hist: [], serverAI: false };
 let capabilities=null;
-let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer;
+let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer, inbox=null;
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = {
@@ -633,6 +660,7 @@ window.addEventListener('unhandledrejection', () => banner('Something went wrong
 function plan() {
   if (!st.data || st.demo || st.stale) { $('planout').textContent = 'Fresh live forecast required for planning.'; return; }
   const hrs = S.hourlyFrom(st.data, st.data.current.time), len = +$('dur').value, p = S.planTrip(hrs, len, +$('from').value, +$('to').value);
+  if(p)inbox?.emit('Commute window ready','A forecast-based lower-pollution time window is available.','plan');
   $('planout').textContent = !p ? 'No clean slot fits inside that time range. Try widening it.'
     : `Lowest forecast average: ${p.win.start.replace('T',' ')} to ${p.win.end.replace('T',' ')} (AQI ${p.win.avg}; peak ${p.win.peak}). ${p.savedPct == null ? '' : p.savedPct + '% lower mean AQI than starting now. '}${S.effectiveLevel(p.win.peak,st.profile)>=2?'Consider an indoor alternative; even this window may be unsuitable.':'Conditions may change; check again before leaving.'}`;
 }
@@ -678,8 +706,10 @@ async function show_(t, b) {
 }
 function notifyCheck(aqi) {
   const l = S.effectiveLevel(aqi, st.profile), thr = +($('thr').value || 2);
-  if (alertsOn && lastLvl !== null && l !== lastLvl && (l >= thr || lastLvl >= thr))
-    show_('Air quality ' + (l > lastLvl ? 'worsened' : 'improved') + ' in ' + st.place.name, 'AQI ' + Math.round(aqi) + ': ' + S.band(aqi).label + (l > lastLvl ? '. ' + S.advice(aqi, st.profile).go : ''));
+  if ((lastLvl===null&&l>=thr)||(lastLvl!==null&&l!==lastLvl&&(l>=thr||lastLvl>=thr))){
+    const title=(lastLvl===null?'Air quality advisory':l>lastLvl?'Air quality worsened':'Air quality improved')+' · '+st.place.name,body='Modelled US AQI '+Math.round(aqi)+': '+S.band(aqi).label+'. '+S.advice(aqi,st.profile).go;
+    inbox?.emit(title,body,'today');if(alertsOn&&lastLvl!==null)show_(title,body);
+  }
   lastLvl = l;
 }
 
@@ -706,7 +736,7 @@ function breatheStep() {
   $('bphase').textContent = n; o.style.setProperty('--d', ms + 'ms'); o.className = 'orb ' + (n === 'Exhale' ? 'out' : 'in');
   bTimer = setTimeout(() => { bPhase = (bPhase + 1) % PH.length; if (bPhase === 0) { bCycles++; $('bcount').textContent = bCycles + (bCycles === 1 ? ' cycle' : ' cycles'); } breatheStep(); }, ms);
 }
-$('bstart').onclick = () => { if (bTimer) { breatheStop(); return; } bPhase = 0; bCycles = 0; $('bcount').textContent = '0 cycles'; $('bstart').textContent = 'Stop'; breatheStep(); };
+$('bstart').onclick = () => { if (bTimer) { const completed=bCycles;breatheStop();if(completed)inbox?.emit('Breathing session complete',completed+' completed breathing '+(completed===1?'cycle':'cycles')+'.','breathe');return; } bPhase = 0; bCycles = 0; $('bcount').textContent = '0 cycles'; $('bstart').textContent = 'Stop'; breatheStep(); };
 
 /* ---------- router ---------- */
 function show(v) {
@@ -754,7 +784,8 @@ $('addc').onclick = () => { if (!st.place || st.demo || cmp.some(c => c.name ===
 $('clrc').onclick = () => { cmp = []; store.set('svasa_cmp', []); drawCities(); };
 $('notif').onclick = async () => {
   if (!('Notification' in window)) { $('notif').textContent = 'Alerts unsupported'; return; }
-  alertsOn = (await Notification.requestPermission()) === 'granted'; $('notif').textContent = alertsOn ? 'Alerts on' : 'Alerts blocked';
+  if(alertsOn){alertsOn=false;store.set('svasa_device_alerts',false);$('notif').textContent='Enable device alerts while open';return;}
+  alertsOn = (await Notification.requestPermission()) === 'granted';store.set('svasa_device_alerts',alertsOn);$('notif').textContent = alertsOn ? 'Disable device alerts while open' : 'Device alerts blocked';if(alertsOn){inbox?.emit('Device alerts enabled','Air-quality changes can now appear as device notifications while Svasa is open.','today');show_('Svasa · Device alerts enabled','You can manage alerts from the notification bell.');}
 };
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('inst').hidden = false; });
 $('inst').onclick = async () => { if (deferredInstall) { deferredInstall.prompt(); deferredInstall = null; $('inst').hidden = true; } };
@@ -801,7 +832,7 @@ $('optimizeday').onclick=()=>{
   const hrs=forecast(), items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
   invalidatePlan();const plan=S.optimizeDay(hrs,items,st.profile);
   if(!plan){$('dayresult').textContent='No feasible schedule with complete data. Widen time flexibility, shorten durations or change preferred times.';return;}
-  currentPlan={createdAt:new Date().toISOString(),city:st.place.name,profile:st.profile,exposure:plan.exposure,baseline:plan.baseline,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
+  currentPlan={createdAt:new Date().toISOString(),city:st.place.name,profile:st.profile,exposure:plan.exposure,baseline:plan.baseline,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;inbox?.emit('Your day plan is ready','Review the proposed schedule and forecast limitations.','plan');
   const change=plan.changePct==null?'Original schedule unavailable or overlapping.':(plan.changePct>=0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
   $('dayresult').innerHTML='<p class="section-kicker">YOUR PROPOSED SCHEDULE</p><h3>'+plan.exposure.toFixed(1)+' µg·h/m³</h3><p>'+esc(change)+'</p>'+plan.slots.map((x,i)=>'<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>').join('')+(plan.risk?'<p class="alert">Some windows still need caution. Consider moving those activities indoors.</p>':'');
 };
@@ -810,12 +841,14 @@ function renderFamily(){
   box.innerHTML=family.length?family.map((x,i)=>'<article class="familymember"><p class="section-kicker">'+esc(S.PROFILES[x.profile].name)+'</p><h3>'+esc(x.name)+'</h3><p>'+esc(live?S.advice(st.data.current.us_aqi,x.profile).go:'Fresh data required for current advice.')+'</p><button type="button" class="btn ghost sm" data-family-use="'+i+'">Use profile</button> <button type="button" class="btn ghost sm" data-family-remove="'+i+'">Remove</button></article>').join(''):'<p class="muted">Add a profile to see personalized guidance here.</p>';
 }
 $('familyprofile').innerHTML=Object.entries(S.PROFILES).map(([k,v])=>'<option value="'+k+'">'+esc(v.name)+'</option>').join('');
-$('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value.trim(),profile=$('familyprofile').value;if(!name||family.length>=6||!Object.hasOwn(S.PROFILES,profile)){banner('Add a nickname; up to six profiles are supported.');return;}family.push({name,profile});store.set('svasa_family',family);$('familyname').value='';renderFamily();};
+$('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value.trim(),profile=$('familyprofile').value;if(!name||family.length>=6||!Object.hasOwn(S.PROFILES,profile)){banner('Add a nickname; up to six profiles are supported.');return;}const next=[...family,{name,profile}];if(!store.set('svasa_family',next)){banner('Could not save family profile on this device.');return;}family=next;$('familyname').value='';renderFamily();inbox?.emit('Family profile added','Your family guidance is ready on this device.','family');};
 $('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){family.splice(Number(b.dataset.familyRemove),1);store.set('svasa_family',family);renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;st.profile=x.profile;$('profile').value=x.profile;if(st.data)render();show('today');}};
 $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderFamily();};
 // Populate non-visible feature views only when opened.
 
-window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,show,banner});
+inbox=window.SvasaInbox.init({$,store,show});
+alertsOn=!!store.get('svasa_device_alerts',false)&&'Notification'in window&&Notification.permission==='granted';if(alertsOn)$('notif').textContent='Disable device alerts while open';
+window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,show,banner,notify:(...args)=>inbox.emit(...args)});
 window.SvasaPushUI.init({$,store,st});
 
 /* ---------- boot ---------- */
