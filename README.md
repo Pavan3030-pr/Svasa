@@ -48,7 +48,7 @@ svasa/
 ```
 
 ## Run locally
-Use the Node version specified in package.json (Node 26.x). No dependencies to install.
+Use the Node version specified in package.json (Node 26.x). Run npm install for the optional Web Push transport.
 ```bash
 export GEMINI_API_KEY="your_key"     # Windows PowerShell: $env:GEMINI_API_KEY="your_key"
 npm start                            # http://localhost:8080
@@ -80,7 +80,7 @@ Check `/api/health`: it should return `{"ok":true,"ai":true}`.
 Air data comes from Open-Meteo (CAMS model estimates), not ground monitors. Guidance is general and not medical advice. See `docs/SECURITY.md` for security notes.
 
 ## SVASA 4
-The Smart Day Planner minimizes caution windows first and outdoor PM2.5 concentration-time proxy second, using up to four ordered activities with fixed or flexible timing. This proxy is not an inhaled dose or a predicted health outcome. Family profiles stay in browser storage. The India-scale model estimate is partial and displayed only when coverage requirements are met; WHO comparisons use matching averaging periods. Alerts are in-app only.
+The Smart Day Planner minimizes caution windows first and outdoor PM2.5 concentration-time proxy second, using up to four ordered activities with fixed or flexible timing. This proxy is not an inhaled dose or a predicted health outcome. Family profiles stay in browser storage. The India-scale model estimate is partial and displayed only when coverage requirements are met; WHO comparisons use matching averaging periods. In-app alerts are always available where supported; optional background alerts require deployment setup.
 
 The assistant now accepts `{q,place:{lat,lon},ctx:{profile,lang,hist}}` and fetches its own model context in UTC. The evidence object identifies the provider and observation time; this is not independently measured ground truth. Reports save explicitly selected forecast-based schedules locally for seven-day review and JSON export. Station data has sensor-specific timestamps and is compared only when recent. No true background push or official India NAQI is claimed.
 
@@ -94,3 +94,6 @@ GitHub Actions runs syntax checks, unit and mocked API integration tests, HTTP s
 
 ### Performance design
 The application uses system typography without third-party font downloads. Air data is rendered before optional weather, and forecast charts and city comparisons are loaded when needed. The service worker caches known static assets only and never caches APIs. Lighthouse results vary with network and runner conditions.
+
+### Optional background Web Push (pilot)
+Run `npm install` and `npx web-push generate-vapid-keys` locally. Set server-only VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY, VAPID_SUBJECT (mailto:your contact), CRON_SECRET (random secret), UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN. Configure a scheduler to send GET /api/push?dispatch=1 with Authorization: Bearer <CRON_SECRET> at the desired cadence. No scheduler is automatically created; Vercel plan limits apply. Pilot cap: 20 subscriptions; 30-day expiry. The browser stores a random ownership token; Redis stores a hash, selected coordinates rounded to 0.01 degrees, AQI threshold and the push subscription. No health profile, nickname or moving-location tracking is stored. A notification is sent when the selected threshold is crossed at a scheduled check. Not a real-time or emergency alert. Chrome/Firefox/Safari provider host allowlist; unsupported providers are rejected. Disabled when configuration is missing. Live delivery requires an opted-in browser and configured infrastructure.

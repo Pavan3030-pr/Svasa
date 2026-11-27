@@ -403,6 +403,46 @@ $('clearreport').onclick=()=>{reports=[];store.set('svasa_reports',reports);rend
 $('exportreport').onclick=()=>{const data={method:'Projected outdoor PM2.5 concentration × hours; not actual exposure or inhaled dose',plans:recentReports()};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-projected-plans.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 renderReports();
 
+
+/* Optional opt-in Web Push. No background location tracking. */
+let pushConfig=null;
+const pushStatus=s=>{$('pushstatus').textContent=s;};
+async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
+async function initPush(){
+ if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window))return;
+ try{
+  const r=await fetch('/api/push');if(!r.ok)return;pushConfig=await r.json();
+  const existing=store.get('svasa_push',null);
+  $('pushoff').hidden=!existing;
+  $('pushon').hidden=!pushConfig.enabled;$('pushthreshold').hidden=!pushConfig.enabled;
+  if(existing)pushStatus('Saved subscription for '+existing.city+' · US AQI '+existing.threshold+'+. Renew or disable it here.');
+ }catch(_){}
+}
+$('pushon').onclick=async()=>{
+ if(!pushConfig?.enabled||!st.place||!st.data||st.demo||st.stale){pushStatus('Load a fresh city reading first.');return;}
+ const place={lat:st.place.lat,lon:st.place.lon},city=st.place.name,threshold=Number($('pushlevel').value),btn=$('pushon');btn.disabled=true;
+ try{
+  if(await Notification.requestPermission()!=='granted')throw Error('Notification permission not granted');
+  const reg=await navigator.serviceWorker.ready;
+  let sub=await reg.pushManager.getSubscription();
+  const old=store.get('svasa_push',null);
+  if(sub&&!old){await sub.unsubscribe();sub=null;}
+  const k=pushConfig.publicKey.replace(/-/g,'+').replace(/_/g,'/'),bytes=Uint8Array.from(atob(k+'='.repeat((4-k.length%4)%4)),c=>c.charCodeAt(0));
+  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});
+  const token=old?.endpoint===sub.endpoint?old.token:Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
+  // Save ownership token before network submission so the user can retry or revoke it.
+  store.set('svasa_push',{endpoint:sub.endpoint,token,city,threshold});
+  $('pushoff').hidden=false;
+  await pushApi({action:'subscribe',subscription:sub.toJSON(),token,place,threshold});
+  pushStatus('Background alerts enabled for '+city+' · US AQI '+threshold+'+. Scheduled checks, not real-time alerts.');
+ }catch(e){pushStatus(e.message+'; you can retry or disable the subscription.');}finally{btn.disabled=false;}
+};
+$('pushoff').onclick=async()=>{
+ const old=store.get('svasa_push',null);if(!old)return;
+ try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
+};
+initPush();
+
 /* ---------- boot ---------- */
 show(location.hash.slice(1));
 const last = store.get('svasa_last', null);

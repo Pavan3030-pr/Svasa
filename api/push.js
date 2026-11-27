@@ -1,0 +1,1 @@
+const route=require('../backend/routes/push'),g=require('../backend/lib/guard');module.exports=async(req,res)=>{const r=await route({method:req.method,headers:req.headers,query:req.query||{},body:req.body,ip:g.ip(req)});res.setHeader('Cache-Control','no-store');res.status(r.status).json(r.body);};
