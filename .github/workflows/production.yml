@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['package-lock.json','package.json','vercel.json','backend/**', 'api/**', 'frontend/**', 'tests/production-smoke.js', '.github/workflows/production.yml']
+    paths: ['package-lock.json','package.json','vercel.json','backend/**', 'api/**', 'frontend/**', 'tests/production-smoke.js', '.github/workflows/production.yml','scripts/wait-deployment.js']
 permissions:
   contents: read
 jobs:
@@ -15,8 +15,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '26'
+      - name: Wait for stable deployed commit
+        run: node scripts/wait-deployment.js
       - name: Verify deployed public endpoints and assistant resilience
         run: node tests/production-smoke.js
+      - name: Confirm exact build after smoke checks
+        run: node scripts/wait-deployment.js
       - name: Upload production evidence
         if: always()
         uses: actions/upload-artifact@v4

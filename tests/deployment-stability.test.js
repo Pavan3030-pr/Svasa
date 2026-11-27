@@ -1,0 +1,3 @@
+'use strict';
+const assert=require('node:assert/strict'),{waitForStable}=require('../scripts/wait-deployment');
+(async()=>{const expected='a'.repeat(40),old='b'.repeat(40);let calls=0;const samples=[expected,old,expected,expected,expected];const opt={expected,read:async()=>({ok:true,build:samples[calls++]}),sleep:async()=>{},log:()=>{}};await waitForStable(opt);assert.equal(calls,5);await assert.rejects(()=>waitForStable({...opt,read:async()=>({ok:true,build:old}),attempts:4}),/did not stabilize/);await assert.rejects(()=>waitForStable({...opt,read:async()=>({ok:false,build:expected}),attempts:3}),/did not stabilize/);console.log('Deployment stability gate rejects mixed and stale builds');})().catch(e=>{console.error(e);process.exitCode=1});

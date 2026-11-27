@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['package-lock.json','package.json','vercel.json','frontend/**','backend/**','api/**','tests/production-browser.js','.github/workflows/production-browser.yml']
+    paths: ['package-lock.json','package.json','vercel.json','frontend/**','backend/**','api/**','tests/production-browser.js','.github/workflows/production-browser.yml','scripts/wait-deployment.js']
 permissions:
   contents: read
 jobs:
@@ -18,14 +18,11 @@ jobs:
       - run: npm install --no-save --package-lock=false playwright@1.65.1
       - run: npx playwright install --with-deps chromium
       - name: Wait for exact deployed build
-        run: |
-          for attempt in $(seq 1 20); do
-            if curl -fsS https://svasa-sage.vercel.app/api/health | grep -q "$GITHUB_SHA"; then exit 0; fi
-            sleep 5
-          done
-          exit 1
+        run: node scripts/wait-deployment.js
       - name: Real user journey (no provider mocks)
         run: node tests/production-browser.js
+      - name: Confirm exact build after browser journey
+        run: node scripts/wait-deployment.js
       - uses: actions/upload-artifact@v4
         if: always()
         with:

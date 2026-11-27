@@ -11,3 +11,7 @@ Genuine usability validation remains external: invite consenting participants to
 ## Live evaluation cooldown remediation
 
 Run 46016230173 on e774ed8 returned HTTP 200 and valid evidence for all five languages, but four responses used provider_rate_limit fallback. Only Bengali returned live Gemini; the strict run correctly failed. Strict requests now wait 70 seconds before each language and retry only explicit provider-rate-limit fallback after 75 and 130 seconds, at most three attempts per language. Regular smoke checks retain their original pace. Strict runs remain failing if any language lacks live output; external provider quotas are not bypassed. The pacing behavior is covered by deterministic tests.
+
+## Stable release verification
+
+Production capacity run 46018202782 observed the previous deployment SHA during rollout after a single matching health response. Production workflows now require three consecutive matching health responses before checking and again after the browser/audit/smoke journey. The capacity test still requires the exact SHA on each health request. Screenshot publication waits for triggered production workflows to finish and skips non-UI changes, preventing the automated documentation commit from advancing the deployment mid-check. Mixed-build and stale-build cases have deterministic tests; no test threshold was relaxed.
