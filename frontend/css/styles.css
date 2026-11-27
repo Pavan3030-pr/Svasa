@@ -131,3 +131,5 @@ a.logo{text-decoration:none}
 .reportentry{padding:16px 0;border-bottom:1px solid var(--line)}.reportentry h3{margin:0;font-size:19px}.reportentry small{color:var(--mute)}.reportentry p{margin:6px 0}#reportsummary{margin:16px 0;font-weight:600}#reportlist{margin-bottom:20px}#saveplan{margin-top:12px}
 
 @media(max-width:900px){.nav{display:flex;flex-direction:row;overflow-x:auto;justify-content:flex-start;scrollbar-width:thin}.nav button{flex:0 0 auto;min-width:64px;min-height:48px}.nav .logo{flex-shrink:0}.nav button span{font-size:11px}}@media(max-width:380px){.activityrow{gap:8px}.activityrow select{font-size:13px}}
+
+.msg.a>div+div{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}.msg.a>div strong{color:var(--brand-d);font-size:13px}.msg.a>div p{margin:5px 0}.msg.a>small{display:block;color:var(--mute);margin-top:12px;font-size:12px}.activityrow .btn:focus-visible,.nav button:focus-visible{outline-offset:2px}

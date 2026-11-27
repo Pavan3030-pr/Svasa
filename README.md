@@ -80,7 +80,7 @@ Check `/api/health`: it should return `{"ok":true,"ai":true}`.
 Air data comes from Open-Meteo (CAMS model estimates), not ground monitors. Guidance is general and not medical advice. See `docs/SECURITY.md` for security notes.
 
 ## SVASA 4
-The Smart Day Planner minimizes caution windows first and outdoor PM2.5 concentration-time proxy second, using up to four ordered activities with fixed or flexible timing. This proxy is not an inhaled dose or a predicted health outcome. Family profiles stay in browser storage. India NAQI display and direct current-to-WHO comparisons are withheld pending scientifically valid coverage and averaging. Alerts are in-app only.
+The Smart Day Planner minimizes caution windows first and outdoor PM2.5 concentration-time proxy second, using up to four ordered activities with fixed or flexible timing. This proxy is not an inhaled dose or a predicted health outcome. Family profiles stay in browser storage. The India-scale model estimate is partial and displayed only when coverage requirements are met; WHO comparisons use matching averaging periods. Alerts are in-app only.
 
 The assistant now accepts `{q,place:{lat,lon},ctx:{profile,lang,hist}}` and fetches its own model context in UTC. The evidence object identifies the provider and observation time; this is not independently measured ground truth. Reports save explicitly selected forecast-based schedules locally for seven-day review and JSON export. Station data has sensor-specific timestamps and is compared only when recent. No true background push or official India NAQI is claimed.
 
@@ -88,3 +88,6 @@ Gemini requests use a structured JSON response contract with recommendation, rea
 
 ### Scientific method and optional shared rate limit
 The partial India-scale display uses four 24-hour pollutant components (PM2.5, PM10, NO2, SO2), at least three available including PM, and at least 16 distinct valid hourly values per component. CO, O3, NH3 and lead are excluded; it may understate the complete index and must not be confused with CPCB readings. Method reference: https://ies.gov.in/arthapedia/concept/national-air-quality-index . WHO comparisons require 24 complete model hours. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on the server to enable atomic shared per-key rate limits. Without both, the existing local limiter is used. The health endpoint exposes configuration status only, not secrets or a live connectivity check. When configured and unavailable, protected endpoints fail closed.
+
+### Quality evidence
+GitHub Actions runs syntax checks, unit and mocked API integration tests, HTTP smoke checks, browser workflows and axe accessibility reports. Browser screenshots and accessibility findings are uploaded as workflow artifacts. A separate Lighthouse workflow records local performance/accessibility/best-practices/SEO scores, rather than declaring unmeasured targets met. It may depend on network availability and is not a live-provider certification.

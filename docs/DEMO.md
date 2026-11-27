@@ -1,10 +1,12 @@
-# 90-second demo script
+# SVASA 4.0 — 90-second judging demo
 
-1. **Open the app (10s).** Point out the verdict chip, the AQI ring and the "Modelled data · Open-Meteo" label. Say where the numbers come from.
-2. **Pick a profile (10s).** Choose Asthma. Show how the advice tiles and the warning change.
-3. **Search a city (10s).** Type a city, pick it, and note the city pill in the top bar.
-4. **Forecast (15s).** Open Forecast. Hover a bar for the tooltip, then show the cleanest-window highlight and the 7-day history.
-5. **Planner (10s).** Set 2 hours between 05:00 and 23:00 and read out the best start time and the percentage saved.
-6. **Cities (10s).** Tap "Add all" to compare six Indian cities, cleanest first.
-7. **Assistant (20s).** Ask "What about my dog?", then switch "Answer in" to Hindi and ask a chip question. Type "I cannot breathe" to show the safety reply.
-8. **Close (5s).** Mention security: strict CSP, key held on the server, rate limiting, input validation. Mention the limits: modelled data, not medical advice.
+Use fresh live model data if available; if demonstrating with test fixtures, state that explicitly.
+
+1. **0–15 seconds: problem.** An AQI number alone doesn't tell a commuter or family how to plan outdoor activities. Open the dashboard and identify the city, US AQI and source.
+2. **15–30 seconds: personalization and trust.** Switch a profile. Show the model and station panels, their times, and the limitations of comparing the two.
+3. **30–55 seconds: signature feature.** Add two or three outdoor activities in the planner, choose preferred times and flexibility, optimize, and show the forecast concentration-time proxy and caution windows. State that it is not measured dose or a health prediction.
+4. **55–68 seconds: useful workflow.** Save the schedule and open Reports. Export the projected plan. Show locally stored family guidance.
+5. **68–82 seconds: explainable AI.** Ask a question in the chosen language. Show recommendation, reason, limitation and authoritative model evidence. Demonstrate an emergency phrase bypassing the model.
+6. **82–90 seconds: close.** "Know your air. Plan your day." Mention uncertainty, offline protection and verified automated checks.
+
+Before judging, verify /api/health, the current workflow run, and the deployment. Do not claim live Gemini, station coverage, or audit scores unless tested.

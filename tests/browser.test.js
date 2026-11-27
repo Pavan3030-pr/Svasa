@@ -1,6 +1,13 @@
 'use strict';
 const assert=require('node:assert/strict'),{chromium}=require('playwright'),fs=require('node:fs');
 const origin='http://localhost:8080';
+async function accessibility(page,name){
+  await page.evaluate(require('axe-core').source);
+  const report=await page.evaluate(()=>window.axe.run({runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));
+  const violations=report.violations.map(v=>({id:v.id,impact:v.impact,description:v.description,help:v.help,targets:v.nodes.map(n=>n.target)}));
+  fs.writeFileSync('test-artifacts/axe-'+name+'.json',JSON.stringify({passes:report.passes.length,violations},null,2));
+  console.log('Accessibility '+name+': '+report.passes.length+' passing rules, '+violations.length+' violation rules');
+}
 const current=new Date();current.setUTCMinutes(0,0,0);
 const stamp=d=>d.toISOString().slice(0,16);
 const hour=3600000;
@@ -21,13 +28,13 @@ async function stub(page){
     const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block',acceptDownloads:true});
     const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await stub(page);
     await page.goto(origin+'/');await page.waitForFunction(()=>document.querySelector('#hAqi').textContent==='112');
-    await page.screenshot({path:'test-artifacts/landing-desktop.png',fullPage:true});
+    await page.screenshot({path:'test-artifacts/landing-desktop.png',fullPage:true});await accessibility(page,'landing');
     await page.goto(origin+'/app.html');await page.waitForFunction(()=>document.querySelector('#hero').textContent.includes('112'));
     if(await page.locator('#onbskip').isVisible())await page.locator('#onbskip').click();
     await page.waitForFunction(()=>document.querySelector('#gs').textContent.includes('Fixture monitor'));
-    await page.screenshot({path:'test-artifacts/dashboard-desktop.png',fullPage:true});
+    await page.screenshot({path:'test-artifacts/dashboard-desktop.png',fullPage:true});await accessibility(page,'dashboard');
     await page.locator('[data-view="plan"]').click();await page.locator('#optimizeday').click();await page.waitForFunction(()=>document.querySelector('#dayresult').textContent.includes('YOUR PROPOSED SCHEDULE'));
-    await page.screenshot({path:'test-artifacts/planner-desktop.png',fullPage:true});
+    await page.screenshot({path:'test-artifacts/planner-desktop.png',fullPage:true});await accessibility(page,'planner');
     await page.locator('#saveplan').click();await page.waitForFunction(()=>document.querySelector('#reportsummary').textContent.includes('1 saved'));
     const download=page.waitForEvent('download');await page.locator('#exportreport').click();assert.equal((await download).suggestedFilename(),'svasa-projected-plans.json');
     await page.locator('[data-view="family"]').click();await page.locator('#familyname').fill('Family member');await page.locator('#familyprofile').selectOption('child');await page.locator('#familyform button[type=submit]').click();await page.locator('.familymember').waitFor();assert.ok((await page.locator('.familymember').textContent()).includes('Family member'));
@@ -35,7 +42,7 @@ async function stub(page){
     await page.locator('#aq').fill('I cannot breathe');await page.locator('#af button').click();await page.locator('.msg.urgent').waitFor();
     await page.screenshot({path:'test-artifacts/assistant-desktop.png',fullPage:true});
     await page.setViewportSize({width:390,height:844});await page.locator('[data-view="today"]').click();await page.screenshot({path:'test-artifacts/dashboard-mobile.png',fullPage:true});
-    await page.locator('[data-view="plan"]').click();assert.equal(await page.locator('#optimizeday').isVisible(),true);await page.screenshot({path:'test-artifacts/planner-mobile.png',fullPage:true});
+    await page.locator('[data-view="plan"]').click();assert.equal(await page.locator('#optimizeday').isVisible(),true);await page.screenshot({path:'test-artifacts/planner-mobile.png',fullPage:true});await accessibility(page,'planner-mobile');
     await page.locator('[data-view="reports"]').click();assert.equal(await page.locator('#reportsummary').isVisible(),true);
     assert.deepEqual(errors,[],'Uncaught browser errors');await context.close();
     const offline=await browser.newContext({serviceWorkers:'block'}),p=await offline.newPage();await p.route('https://air-quality-api.open-meteo.com/**',r=>r.abort());await p.route('https://api.open-meteo.com/**',r=>r.abort());await p.goto(origin+'/app.html');await p.waitForFunction(()=>document.querySelector('#hero').textContent.includes('Sample data'));assert.ok((await p.locator('#adv').textContent()).includes('Data unavailable'));await p.locator('[data-view="plan"]').click();assert.equal(await p.locator('#optimizeday').isDisabled(),true);await offline.close();

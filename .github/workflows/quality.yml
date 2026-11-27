@@ -1,0 +1,43 @@
+name: SVASA quality audit
+on:
+  push:
+    branches: [main]
+    paths: ['frontend/**', 'backend/**', 'tests/**', '.github/workflows/quality.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lighthouse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Install Lighthouse
+        run: npm install --no-save --package-lock=false lighthouse@13.6.0
+      - name: Collect local mobile and desktop audits
+        run: |
+          mkdir -p quality-artifacts
+          node backend/server.js > /tmp/svasa-quality.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" || true' EXIT
+          curl --retry 10 --retry-connrefused --retry-delay 1 -fsS http://localhost:8080/api/health
+          export CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)"
+          test -n "$CHROME_PATH"
+          for page in index app; do
+            for mode in mobile desktop; do
+              EXTRA=""
+              if [ "$mode" = desktop ]; then EXTRA="--preset=desktop"; fi
+              npx --no-install lighthouse "http://localhost:8080/$page.html" $EXTRA --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path="quality-artifacts/$page-$mode.json" --quiet
+            done
+          done
+          node -e "const fs=require('fs');for(const f of fs.readdirSync('quality-artifacts')){const j=JSON.parse(fs.readFileSync('quality-artifacts/'+f));if(j.runtimeError)throw Error(j.runtimeError.message);console.log(f,JSON.stringify(Object.fromEntries(Object.entries(j.categories).map(([k,v])=>[k,Math.round(v.score*100)]))))}" | tee quality-artifacts/scores.txt
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: svasa-lighthouse
+          path: quality-artifacts/
+          if-no-files-found: ignore
