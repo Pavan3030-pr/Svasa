@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
 
       - name: Install browser test dependencies
         run: |
-          npm install --no-save --package-lock=false playwright@1.51.1
+          npm install --no-save --package-lock=false playwright@1.65.1
           npx playwright install --with-deps chromium
       - name: Desktop and mobile browser flows
         run: |
