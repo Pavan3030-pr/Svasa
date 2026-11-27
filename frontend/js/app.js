@@ -245,7 +245,7 @@ async function ask(q, en) {
   if (location.protocol.startsWith('http')) { try { result = await viaServer(q); } catch (_) {} }
   if(requestSeq!==loadSequence||requestProfile!==st.profile||requestLang!==st.lang){t.textContent='Context changed. Please ask again.';t.classList.remove('typing');busy=false;return;}
   const a=result&&result.answer; const text=a||('Local rule-based fallback (English; model data): '+fb);
-  t.textContent=text; t.classList.remove('typing'); t.dataset.source=result&&result.source||'local'; $('log').scrollTop = $('log').scrollHeight;
+  t.textContent=text; if(result&&result.sections&&result.evidence){t.textContent='';for(const [label,key] of [['Recommendation','recommendation'],['Why','reason'],['Limitations','limitation']]){const row=document.createElement('div'),heading=document.createElement('strong'),body=document.createElement('p');heading.textContent=label;body.textContent=result.sections[key];row.append(heading,body);t.append(row);}const evidence=document.createElement('small');evidence.textContent='Open-Meteo / CAMS · US AQI '+Math.round(result.evidence.aqi)+' · '+result.evidence.observedAt+' (UTC)';t.append(evidence);} t.classList.remove('typing'); t.dataset.source=result&&result.source||'local'; $('log').scrollTop = $('log').scrollHeight;
   st.hist=st.hist.concat([{r:'u',t:q},{r:'a',t:text}]).slice(-8);busy=false;
 }
 

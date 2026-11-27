@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node backend/server.js",
     "dev": "node backend/server.js",
-    "test": "node tests/core.test.js && node tests/server.test.js && node tests/vercel.test.js && node tests/stations.test.js && node tests/reliability.test.js && node tests/day.test.js && node tests/grounding.test.js"
+    "test": "node tests/core.test.js && node tests/server.test.js && node tests/vercel.test.js && node tests/stations.test.js && node tests/reliability.test.js && node tests/day.test.js && node tests/grounding.test.js && node tests/ai-contract.test.js"
   },
   "engines": {
     "node": "26.x"

@@ -3,7 +3,7 @@ process.env.GEMINI_API_KEY='k';
 let aiHits=0;
 const airFixture=()=>({current:{time:new Date().toISOString().slice(0,16),us_aqi:160,pm2_5:55,us_aqi_pm2_5:160},hourly:{time:[],us_aqi:[],pm2_5:[]}});
 
-const mock=http.createServer((q,r)=>{if(q.url.startsWith('/air?')){r.setHeader('content-type','application/json');return r.end(JSON.stringify(airFixture()));}q.resume();q.on('end',()=>{aiHits++;r.setHeader('content-type','application/json');r.end(JSON.stringify({candidates:[{content:{parts:[{text:'Wear N95. '+(q.headers['x-goog-api-key']==='k'?'keyok':'')}]}}]}))})});
+const mock=http.createServer((q,r)=>{if(q.url.startsWith('/air?')){r.setHeader('content-type','application/json');return r.end(JSON.stringify(airFixture()));}q.resume();q.on('end',()=>{aiHits++;r.setHeader('content-type','application/json');r.end(JSON.stringify({candidates:[{content:{parts:[{text:JSON.stringify({kind:'air',recommendation:'Wear N95. '+(q.headers['x-goog-api-key']==='k'?'keyok':''),reason:'High pollution.',limitation:'Model estimate.'})}]}}]}))})});
 mock.listen(0,()=>{process.env.GEMINI_BASE='http://127.0.0.1:'+mock.address().port;process.env.AIR_CONTEXT_BASE=process.env.GEMINI_BASE+'/air';
 const app=require('../backend/server.js');
 app.listen(0,async()=>{const B='http://127.0.0.1:'+app.address().port;

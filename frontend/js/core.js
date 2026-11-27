@@ -162,7 +162,7 @@
   function scriptLang(q){return /[\u0900-\u097F]/.test(q)?'hi':/[\u0C00-\u0C7F]/.test(q)?'te':/[\u0B80-\u0BFF]/.test(q)?'ta':/[\u0980-\u09FF]/.test(q)?'bn':null}
   function safety(q,lang){
     const s=String(q||'');
-    return /(chest (pain|pressure|(is |feels )?(tight|heavy))|can'?t (breathe|catch my breath)|cannot breathe|(struggling|trouble|difficulty) (to )?breath|gasping|short(ness)? of breath|blue lips|faint|unconscious|passing out|heart (racing|pounding)|suicid|self.harm|kill myself|सांस (नहीं|लेने)|सीने में दर्द|ఊపిరి|ఛాతి నొప్పి|ఛాతీ నొప్పి|மூச்சு|நெஞ்சு வலி|শ্বাস|বুকে ব্যথা)/i.test(s)?(EMERG[scriptLang(s)||lang]||EMERG.en):null;
+    return /(chest (pain|pressure|(is |feels )?(tight|heavy))|can'?t (breathe|catch my breath)|cannot breathe|(struggling|trouble|difficulty) (to )?breath|gasping|short(ness)? of breath|blue lips|faint|unconscious|passing out|heart (racing|pounding)|suicid|self.harm|kill myself|सांस (नहीं|लेने)|सीने में दर्द|ఊపిరి\s*(ఆడటం లేదు|రావడం లేదు|తీసుకోలేను|తీసుకోవడం కష్టం)|ఛాతి నొప్పి|ఛాతీ నొప్పి|மூச்சு\s*(விட முடியவில்லை|திணறல்|விட சிரமம்)|நெஞ்சு வலி|শ্বাস\s*(নিতে পারছি না|নিতে কষ্ট|কষ্ট)|বুকে ব্যথা)/i.test(s)?(EMERG[scriptLang(s)||lang]||EMERG.en):null;
   }
   const SRC={en:['Data used','main pollutant','trend','cleanest window',{rising:'rising',falling:'falling',steady:'steady'}],
     hi:['उपयोग किया गया डेटा','मुख्य प्रदूषक','रुझान','सबसे साफ़ समय',{rising:'बढ़ रहा',falling:'घट रहा',steady:'स्थिर'}],
