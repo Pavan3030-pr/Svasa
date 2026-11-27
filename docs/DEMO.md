@@ -10,3 +10,5 @@ Use fresh live model data if available; if demonstrating with test fixtures, sta
 6. **82–90 seconds: close.** "Know your air. Plan your day." Mention uncertainty, offline protection and verified automated checks.
 
 Before judging, verify /api/health, the current workflow run, and the deployment. Do not claim live Gemini, station coverage, or audit scores unless tested.
+
+Optional final proof: show the notification test and user-confirmed receipt only if it really arrived. Use the voluntary feedback form and cite genuine participant results only after a consent-based usability study; do not count automated browser test inputs as participant feedback.

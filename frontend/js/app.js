@@ -419,6 +419,12 @@ $('clearreport').onclick=()=>{reports=[];store.set('svasa_reports',reports);rend
 $('exportreport').onclick=()=>{const data={method:'Projected outdoor PM2.5 concentration × hours; not actual exposure or inhaled dose',plans:recentReports()};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-projected-plans.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 renderReports();
 
+/* Optional local-only usability evidence. No analytics or remote submission. */
+let feedback=store.get('svasa_feedback',[]);if(!Array.isArray(feedback))feedback=[];
+function renderFeedback(){const n=feedback.length;$('feedbacksummary').textContent=n?n+' local responses saved. Export only if you choose to share them.':'No feedback submitted on this device.';$('exportfeedback').disabled=!n;$('clearfeedback').disabled=!n;}
+$('feedbackform').onsubmit=e=>{e.preventDefault();const task=$('feedbacktask').value,trust=$('feedbacktrust').value,ease=Number($('feedbackease').value);if(!['yes','partly','no'].includes(task)||!['yes','partly','no'].includes(trust)||!Number.isInteger(ease)||ease<1||ease>5)return;feedback=[{task,trust,ease},...feedback].slice(0,100);store.set('svasa_feedback',feedback);e.target.reset();renderFeedback();};
+$('exportfeedback').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({method:'Optional self-reported usability responses; local device; no clinical outcomes',responses:feedback},null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-usability-feedback.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('clearfeedback').onclick=()=>{feedback=[];store.set('svasa_feedback',feedback);renderFeedback();};renderFeedback();
 
 /* Optional opt-in Web Push. No background location tracking. */
 let pushConfig=null;
@@ -456,9 +462,11 @@ $('pushon').onclick=async()=>{
 };
 $('pushoff').onclick=async()=>{
  const old=store.get('svasa_push',null);if(!old)return;
- try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;$('pushtest').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
+ try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub)await sub.unsubscribe();await pushApi({action:'unsubscribe',endpoint:old.endpoint,token:old.token});store.set('svasa_push',null);$('pushoff').hidden=true;$('pushtest').hidden=true;$('pushreceived').hidden=true;pushStatus('Background alerts disabled.');}catch(_){pushStatus('Local notifications may be disabled, but server deletion was not confirmed. Retry or wait for 30-day expiry.');}
 };
-$('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});pushStatus('Test accepted by the push service. Check your device notifications to confirm delivery.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
+$('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});$('pushreceived').hidden=false;pushStatus('Test accepted by the push service. Check your device notifications, then confirm receipt only if you actually saw it.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
+$('pushreceived').onclick=()=>{store.set('svasa_push_receipt',{confirmedAt:new Date().toISOString(),method:'user-confirmed'});$('pushreceived').hidden=true;pushStatus('Receipt confirmed by you on this device.');};
+if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-test-shown'){ $('pushreceived').hidden=false;pushStatus('The browser displayed a test notification. Confirm only if you saw it.');}});
 const alertsPanel=$('pushon').closest('.card');
 if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)){observer.disconnect();initPush();}},{rootMargin:'160px'});observer.observe(alertsPanel);}else initPush();
 

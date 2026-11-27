@@ -147,3 +147,5 @@ a.logo{text-decoration:none}
 
 /* Mobile dashboard: avoid broad paint invalidation and costly shadows on scroll. */
 @media(max-width:620px){.card{box-shadow:none}.hero{background:linear-gradient(135deg,var(--t),var(--surface))}.nav,.top{backdrop-filter:none}.grid2>.card{content-visibility:auto;contain-intrinsic-size:auto 300px}}
+
+.feedback .form-row{align-items:end}.feedback .form-row label{min-width:0}.feedback .row{margin-top:12px}.feedback #feedbacksummary{margin-top:16px}@media(max-width:620px){.feedback .form-row{display:grid;grid-template-columns:1fr}}
