@@ -25,3 +25,7 @@ Assistant verification has been extended with localized numerical and unsupporte
 ## Provider overload and station freshness
 
 Added per-instance upstream admission controls with request coalescing, no unbounded waiting queue, capacity rejection and recovery. Station lookup is bounded by a shared deadline, respects 429 cooldown and prefers the nearest fresh comparable station among the inspected candidates. Synthetic concurrency tests exercise duplicate callers, distinct overload, and provider rate limits; they do not establish public production throughput or long-term forecast accuracy.
+
+## Quick-answer reliability
+
+Added explicit verified mode for six allowlisted questions in all five languages, with fresh server-side context and no model call. Typed questions retain live AI verification. The prior local Lighthouse run 46029459933 failed because one mobile landing sample scored 83 (692 ms total blocking time); the other two scored 100. The trace attributes most long-task duration to unattributable browser work. No quality gate was lowered. Recheck on the new release before claiming a pass.

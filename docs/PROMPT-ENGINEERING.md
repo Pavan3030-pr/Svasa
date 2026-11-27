@@ -21,3 +21,7 @@ Shared Redis rate limiting is optional and needs server-side environment variabl
 ## Answer correctness hardening
 
 Provider fallback now distinguishes recognized air-quality guidance from unsupported requests (including dosage and diagnosis), explicitly stating the limitation in each of the five supported languages. Response validation checks common localized AQI labels, decimal and number-before-AQI claims, current-versus-window AQI, PM2.5 claims even without units, and nonempty off-topic payloads. These checks are deliberately bounded, not comprehensive semantic or clinical validation. A provider quota failure remains an external blocker to live-model verification; never label fallback as Gemini.
+
+## Explicit verified quick answers
+
+The six localized quick questions use a dedicated server-side mode with exact allowlisted text and a canonical intent. Fresh independently fetched model data is required. The response is fixed guidance, explicitly source=verified; no Gemini call or quota reservation. Free-text questions still use Gemini and remain subject to the strict five-language live evaluation. Emergency detection precedes both paths. A matrix of profile, AQI and language combinations validates response shape and evidence; this is not independent semantic or clinical assessment.

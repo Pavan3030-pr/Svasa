@@ -1,7 +1,7 @@
 'use strict';
 const {performance}=require('node:perf_hooks');
 const reasons=new Set(['provider_rate_limit','provider_network','provider_unavailable','provider_rejected','provider_unconfigured','invalid_model_response','provider_budget_unavailable','provider_budget_exhausted']);
-const sources=new Set(['gemini','rules','safety','offtopic']);
+const sources=new Set(['gemini','rules','safety','offtopic','verified']);
 const routes=new Set(['ask','stations','push','push-dispatch']);
 function event(route,result,elapsed){
  if(!routes.has(route))throw Error('Unknown diagnostic route');
