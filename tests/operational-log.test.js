@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),{observe,event}=require('../backend/lib/operational-log');
+(async()=>{const records=[],request={body:{q:'private-prompt',place:{lat:17.123456,lon:78.123456}},headers:{authorization:'private-token'},ip:'private-ip'},result={status:200,body:{source:'rules',reason:'provider_rate_limit',answer:'private-answer',evidence:{aqi:160}}};let t=0;
+ const run=observe('ask',async r=>{assert.equal(r,request);t+=42;return result;},{write:r=>records.push(r),clock:()=>t});
+ assert.equal(await run(request),result);assert.deepEqual(records,[{event:'svasa_api',route:'ask',status:200,durationMs:42,outcome:'fallback',source:'rules',reason:'provider_rate_limit'}]);
+ assert.ok(!JSON.stringify(records).includes('private'));assert.ok(!JSON.stringify(records).includes('17.123456'));
+ assert.equal(event('ask',{status:200,body:{source:'untrusted',reason:'private'}},1).source,undefined);
+ assert.equal(event('stations',{status:200,body:{station:{ageHours:4,name:'private'}}},1).station,'stale');
+ assert.equal(event('stations',{status:200,body:{station:null}},1).station,'not-found');
+ assert.equal(await observe('ask',async()=>result,{write:()=>{throw Error('log unavailable')}})(request),result);
+ await assert.rejects(observe('ask',async()=>{throw Error('private failure')},{write:r=>records.push(r)})(request),/private failure/);assert.equal(records.at(-1).status,500);assert.ok(!JSON.stringify(records).includes('private'));
+ console.log('Operational logging privacy, fallback attribution and failure isolation tests passed');
+})().catch(e=>{console.error(e);process.exitCode=1});

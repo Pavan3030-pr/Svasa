@@ -26,3 +26,5 @@ module.exports = async function ask(req) {
     return R(200, { sections:r.value, answer: [r.value.recommendation,r.value.reason,r.value.limitation].join('\n') + '\n' + S.sources(ctx, ctx.lang) + ' (UTC) · Open-Meteo / CAMS · ' + ctx.observedAt, source: 'gemini', evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window} });
   } catch (e) { return R(502, { error: 'AI request failed' }); } finally { inflight--; }
 };
+
+module.exports=require('../lib/operational-log').observe('ask',module.exports);

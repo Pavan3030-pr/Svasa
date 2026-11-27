@@ -19,3 +19,5 @@ module.exports=async function route(req){
   return R(status,{ok:status===200});
  }catch(_){return R(503,{error:'Push storage unavailable'});}
 };
+
+module.exports=require('../lib/operational-log').observe('push',module.exports);

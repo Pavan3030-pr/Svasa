@@ -23,7 +23,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = req.url.split('?')[0];
     if(url.startsWith('/api/'))res.setHeader('Cache-Control','no-store');
-    res.on('finish', () => { if (res.statusCode >= 400) console.log(JSON.stringify({ t: new Date().toISOString(), m: req.method, u: url, s: res.statusCode })); });
+    res.on('finish', () => { if (res.statusCode >= 400) console.log(JSON.stringify({ t: new Date().toISOString(), m: req.method, u: ['/api/ask','/api/stations','/api/push','/api/push-dispatch','/api/health'].includes(url)?url:'other', s: res.statusCode })); });
     if (url === '/api/health' && req.method === 'GET') { const r = health(); return send(res, r.status, r.body); }
     if (url === '/api/stations') {
       const q = Object.fromEntries(new URL(req.url, 'http://x').searchParams);
