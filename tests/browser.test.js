@@ -34,7 +34,7 @@ async function stub(page){
     if(await page.locator('#onbskip').isVisible())await page.locator('#onbskip').click();
     await page.waitForFunction(()=>document.querySelector('#gs').textContent.includes('Fixture monitor'));
     await page.screenshot({path:'test-artifacts/dashboard-desktop.png',fullPage:true});await accessibility(page,'dashboard');
-    await page.locator('[data-view="hourly"]').click();await page.locator('#chart svg').waitFor();await page.locator('[data-view="plan"]').click();await page.locator('#optimizeday').click();await page.waitForFunction(()=>document.querySelector('#dayresult').textContent.includes('YOUR PROPOSED SCHEDULE'));
+    await page.locator('[data-view="hourly"]').click();await page.locator('#chart svg').waitFor();await page.locator('#hist svg').waitFor();await page.locator('[data-view="plan"]').click();await page.locator('#optimizeday').click();await page.waitForFunction(()=>document.querySelector('#dayresult').textContent.includes('YOUR PROPOSED SCHEDULE'));
     await page.screenshot({path:'test-artifacts/planner-desktop.png',fullPage:true});await accessibility(page,'planner');
     await page.locator('#saveplan').click();await page.waitForFunction(()=>document.querySelector('#reportsummary').textContent.includes('1 saved'));
     const download=page.waitForEvent('download');await page.locator('#exportreport').click();assert.equal((await download).suggestedFilename(),'svasa-projected-plans.json');

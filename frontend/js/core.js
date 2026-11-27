@@ -121,7 +121,7 @@
   function slope(h){const p=h.slice(0,6).filter(x=>typeof x.aqi==='number');if(p.length<4)return 0;const n=p.length,mx=(n-1)/2,my=p.reduce((s,x)=>s+x.aqi,0)/n;let a=0,b=0;p.forEach((x,i)=>{a+=(i-mx)*(x.aqi-my);b+=(i-mx)*(i-mx)});return a/b}
   function trend(h){if(!Array.isArray(h)||h.length<6)return 'steady';const s=slope(h);return s>3?'rising':s<-3?'falling':'steady'}
   function rank(list){
-    return list.filter(x=>x&&typeof x.aqi==='number').sort((a,b)=>a.aqi-b.aqi);
+    return list.filter(x=>x&&band(x.aqi)).sort((a,b)=>a.aqi-b.aqi);
   }
   function buildPrompt(q,ctx){
     const b=band(ctx.aqi),w=ctx.window,wx=ctx.wx||{};

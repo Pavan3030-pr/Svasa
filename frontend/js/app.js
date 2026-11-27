@@ -28,26 +28,26 @@ function demo() {
   for (let i = 0; i < 48; i++) { const h = i % 24, w = Math.sin((h - 4) / 24 * 6.28); time.push(day + 'T' + String(h).padStart(2, '0') + ':00'); us.push(Math.round(95 + 55 * w)); pm.push(40 + 25 * w); }
   return { current: { time: day + 'T12:00', us_aqi: 132, pm2_5: 48.2, pm10: 90, nitrogen_dioxide: 38, ozone: 72, sulphur_dioxide: 12, carbon_monoxide: 610, us_aqi_pm2_5: 132, us_aqi_pm10: 70, us_aqi_nitrogen_dioxide: 30, us_aqi_ozone: 55, us_aqi_sulphur_dioxide: 8, us_aqi_carbon_monoxide: 7 }, hourly: { time, us_aqi: us, pm2_5: pm } };
 }
-let loadSequence = 0;
+let loadSequence = 0, historyReading=null, historyRequest=null;
+const snapKey=p=>'svasa_snap_v2_'+Number(p.lat).toFixed(4)+','+Number(p.lon).toFixed(4);
 async function load(p) {
-  const seq = ++loadSequence;
+  const seq = ++loadSequence;historyReading=null;historyRequest=null;
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
   st.ctx = null; st.data = null; invalidatePlan(); $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
-  $('hero').innerHTML='<div class="ring loadingring" aria-hidden="true"><div><b>—</b><span>US AQI</span></div></div><div><p class="eyebrow">Retrieving model data</p><h1>Checking the air</h1><p class="lead" role="status">Loading current air data…</p></div>';
+  if(!$('hero').querySelector('.loadingring'))$('hero').innerHTML='<div class="ring loadingring" aria-hidden="true"><div><b>—</b><span>US AQI</span></div></div><div><p class="eyebrow">Retrieving model data</p><h1>Checking the air</h1><p class="lead" role="status">Loading current air data…</p></div>';
   st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   st.wx=null;
-  const weather=jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`,5000).then(x=>x.current).catch(()=>null);
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
   try {
-    const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5,pm10,nitrogen_dioxide,sulphur_dioxide,ozone,carbon_monoxide&forecast_days=2&past_days=7&timezone=auto`);
+    const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5,pm10,nitrogen_dioxide,sulphur_dioxide,ozone,carbon_monoxide&forecast_days=2&past_days=1&timezone=auto`);
     if (seq !== loadSequence) return;
     if (!d.current || !S.band(d.current.us_aqi)) throw new Error('No data for this location yet');
     const age=S.readingAge(d);if(age===null||age>3||age< -1)throw new Error('Provider reading is stale or has no valid timestamp');
-    st.data = d; st.demo = false; st.stale = null; store.set('svasa_snap_' + p.name, { at: Date.now(), data: d });
+    st.data = d; st.demo = false; st.stale = null; store.set(snapKey(p), { at: Date.now(), data: d });
   } catch (e) {
     if (seq !== loadSequence) return;
-    const snap = store.get('svasa_snap_' + p.name, null);
+    const snap = store.get(snapKey(p), null);
     if (snap && snap.data) { st.data = snap.data; st.demo = false; st.stale = snap.at; banner('Offline. Showing the last saved reading from ' + new Date(snap.at).toLocaleString() + '.'); }
     else { st.data = demo(); st.demo = true; st.stale = null; banner('Live data is unavailable (' + e.message + '). Showing sample data.'); }
   }
@@ -56,7 +56,7 @@ async function load(p) {
   $('v-today').classList.remove('loading');
   render(); loadStation();
   if(location.hash==='#cities')drawCities();
-  const w=await weather;
+  const w=await jget(`${WX}?latitude=${p.lat}&longitude=${p.lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m`,5000).then(x=>x.current).catch(()=>null);
   if(seq!==loadSequence||!w||![w.temperature_2m,w.relative_humidity_2m,w.wind_speed_10m].every(Number.isFinite))return;
   st.wx={t:Math.round(w.temperature_2m),h:Math.round(w.relative_humidity_2m),w:Math.round(w.wind_speed_10m)};
   if(st.ctx)st.ctx.wx=st.wx;
@@ -106,7 +106,7 @@ function render() {
   }).join('');
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
-  st.hrs = hrs; drawStrip(hrs); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);drawHistory(c);}
+  st.hrs = hrs; drawStrip(hrs); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);loadHistory();}
   $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
   if (!st.demo && !st.stale) notifyCheck(aqi);
   if(location.hash==='#family')renderFamily(); if(location.hash==='#plan')renderActivityTimes();
@@ -122,8 +122,17 @@ function drawChart(h, win) {
   }).join('');
   $('chart').innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Hourly AQI for the next 24 hours with values. Outlined bars mark the cleanest window.">${grid}${bars}</svg>` + legend();
 }
-function drawHistory(c) {
-  const days = S.lastDays(S.dailyAvg(st.data), c.time.slice(0, 10), 7), ins = S.insights(days), vw = S.vsWeek(days, c.time.slice(0, 10));
+async function loadHistory(){
+  if(!st.data||st.demo||st.stale){$('histtxt').textContent='Fresh history unavailable.';$('hist').textContent='';return;}
+  const seq=loadSequence,p=st.place,c=st.data.current;
+  if(historyReading){drawHistory(c,historyReading);return;}
+  if(historyRequest)return;
+  $('histtxt').textContent='Loading seven-day history…';$('hist').textContent='';
+  historyRequest=jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&hourly=us_aqi&forecast_days=1&past_days=7&timezone=auto`);
+  try{const data=await historyRequest;if(seq!==loadSequence)return;historyReading=data;drawHistory(c,data);}catch(_){if(seq===loadSequence)$('histtxt').textContent='History temporarily unavailable. Reopen Forecast to retry.';}finally{if(seq===loadSequence)historyRequest=null;}
+}
+function drawHistory(c,data) {
+  const days = S.lastDays(S.dailyAvg(data), c.time.slice(0, 10), 7), ins = S.insights(days), vw = S.vsWeek(days, c.time.slice(0, 10));
   $('histtxt').textContent = ins ? `Best day ${ins.best.date} (AQI ${ins.best.avg}), worst ${ins.worst.date} (AQI ${ins.worst.avg}). ${ins.over} of ${days.length} days averaged above 100.` + (vw === null ? '' : ` Today is ${Math.abs(vw)}% ${vw >= 0 ? 'higher' : 'lower'} than the average of the previous days.`) : 'No history available.';
   const max = Math.max(150, ...days.map(x => x.avg));
   $('hist').innerHTML = `<svg width="${Math.max(480, days.length * 64)}" height="170" role="img" aria-label="Daily average AQI">` + days.map((d, i) => {
@@ -179,7 +188,7 @@ function drawStation(s) {
 let comparisonSequence=0;
 async function drawCities() {
   const seq=++comparisonSequence, places=cmp.slice();
-  const out=await Promise.all(places.map(async p=>{try{const r=await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=us_aqi,pm2_5`);return {name:p.name,aqi:r.current.us_aqi,pm:r.current.pm2_5,p};}catch(_){return null;}}));
+  const out=await Promise.all(places.map(async p=>{try{const r=await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=us_aqi,pm2_5&timezone=auto`);const age=S.readingAge(r);if(age===null||age>3||age< -1||!S.band(r.current?.us_aqi))return null;return {name:p.name,aqi:r.current.us_aqi,pm:r.current.pm2_5,p};}catch(_){return null;}}));
   if(seq!==comparisonSequence)return;
   const rk = S.rank(out);
   $('cmp').innerHTML = rk.length ? rk.map((x, i) => { const b = S.band(x.aqi);
@@ -296,7 +305,7 @@ function show(v) {
   document.querySelectorAll('.view').forEach(s => { s.hidden = s.id !== 'v-' + v; });
   document.querySelectorAll('#nav button').forEach(b => b.setAttribute('aria-current', b.dataset.view === v ? 'page' : 'false'));
   if (history.replaceState) history.replaceState(null, '', '#' + v);
-  if(v==='hourly'&&st.data){drawChart(st.hrs||[],st.ctx?.window);drawHistory(st.data.current);}
+  if(v==='hourly'&&st.data){drawChart(st.hrs||[],st.ctx?.window);loadHistory();}
   if(v==='cities')drawCities();
   if(v==='family')renderFamily();
   if(v==='plan')renderActivityTimes();
@@ -348,7 +357,7 @@ function getCapabilities(){if(!capabilities)capabilities=fetch('/api/health',{si
 getCapabilities().then(j=>{st.serverAI=!!j?.ai;$('aimode').textContent=st.serverAI?'Gemini on':'Rule-based answers';});
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 setInterval(() => { if (st.place && !document.hidden && !busy) load(st.place); }, 5 * 60 * 1000);
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {const register=()=>navigator.serviceWorker.register('sw.js').catch(()=>{});window.addEventListener('load',()=>{if('requestIdleCallback'in window)requestIdleCallback(register,{timeout:2500});else setTimeout(register,100);},{once:true});}
 
 $('onbchips').innerHTML = Object.entries(S.PROFILES).map(([k, v]) => `<button type="button" class="chip" data-k="${k}">${esc(v.name)}</button>`).join('');
 $('onbchips').onclick = e => { const b = e.target.closest('button'); if (!b) return; st.profile = b.dataset.k; $('profile').value = st.profile; store.set('svasa_onb', 1); $('onb').hidden = true; if (st.data) render(); };

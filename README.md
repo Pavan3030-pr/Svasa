@@ -111,3 +111,5 @@ The optional notification test button sends only to the current browser's owned 
 Native-script validation is enforced in each non-English response field. One bounded retry is allowed for malformed or wrong-language AI output; unsupported responses fail closed. Production tests report HTTP status, source and per-field script checks without recording user conversation text.
 
 Gemini HTTP 429 responses produce explicitly labelled, localized rule-based general guidance from fresh server data. This is not counted as a live Gemini success. Production live language requests are paced and quota-limited evaluations remain incomplete (nonzero exit), rather than being misreported as passing.
+
+The initial dashboard requests only one past day for pollutant averages and the next two forecast days. Seven-day AQI history loads separately when Forecast is opened. Offline snapshots are keyed by coordinates. Weather and service worker installation no longer compete with the initial air-quality response.
