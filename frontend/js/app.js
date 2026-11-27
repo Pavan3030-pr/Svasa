@@ -30,10 +30,12 @@ function demo() {
 }
 let loadSequence = 0, historyReading=null, historyRequest=null;
 const snapKey=p=>'svasa_snap_v2_'+Number(p.lat).toFixed(4)+','+Number(p.lon).toFixed(4);
+function usableReading(d){return !!(d&&d.current&&S.band(d.current.us_aqi)&&typeof d.current.time==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.current.time)&&Number.isFinite(Date.parse(d.current.time+'Z')));}
+function usableSnapshot(s){return !!(s&&Number.isFinite(s.at)&&s.at>0&&s.at<=Date.now()+60000&&usableReading(s.data));}
 async function load(p) {
   const seq = ++loadSequence;historyReading=null;historyRequest=null;
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
-  st.ctx = null; st.data = null; invalidatePlan(); $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
+  st.ctx = null; st.data = null; invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
   $('aqiring').classList.add('loadingring');$('aqiring').setAttribute('aria-label','Air quality loading');$('aqiring').style.setProperty('--p',0);$('aqivalue').textContent='—';$('aqimeta').textContent='Retrieving model data';$('aqiverdict').textContent='Checking the air';$('aqilead').textContent='Loading current air data…';$('aqichips').innerHTML='<span class="chip2">Modelled data · Open-Meteo</span>';$('goplan').disabled=true;$('share').disabled=true;
   $('adv').textContent='Loading current guidance…';$('alert').textContent='';$('pol').textContent='Loading pollutant readings…';$('strip').textContent='Loading hourly forecast…';$('win').textContent='Loading forecast…';$('chart').textContent='';$('hist').textContent='';$('histtxt').textContent='Loading history…';$('disp').textContent='';st.hrs=[];
@@ -43,13 +45,13 @@ async function load(p) {
   try {
     const d = await jget(`${AQ}?latitude=${p.lat}&longitude=${p.lon}&current=${cur}&hourly=us_aqi,pm2_5,pm10,nitrogen_dioxide,sulphur_dioxide,ozone,carbon_monoxide&forecast_days=2&past_days=1&timezone=auto`);
     if (seq !== loadSequence) return;
-    if (!d.current || !S.band(d.current.us_aqi)) throw new Error('No data for this location yet');
+    if (!usableReading(d)) throw new Error('No data for this location yet');
     const age=S.readingAge(d);if(age===null||age>3||age< -1)throw new Error('Provider reading is stale or has no valid timestamp');
     st.data = d; st.demo = false; st.stale = null; store.set(snapKey(p), { at: Date.now(), data: d });
   } catch (e) {
     if (seq !== loadSequence) return;
     const snap = store.get(snapKey(p), null);
-    if (snap && snap.data) { st.data = snap.data; st.demo = false; st.stale = snap.at; banner('Offline. Showing the last saved reading from ' + new Date(snap.at).toLocaleString() + '.'); }
+    if (usableSnapshot(snap)) { st.data = snap.data; st.demo = false; st.stale = snap.at; banner('Offline. Showing the last saved reading from ' + new Date(snap.at).toLocaleString() + '.'); }
     else { st.data = demo(); st.demo = true; st.stale = null; banner('Live data is unavailable (' + e.message + '). Showing sample data.'); }
   }
   if (seq !== loadSequence) return;
@@ -71,14 +73,15 @@ function render() {
   const root = document.querySelector('.main').style; root.setProperty('--c', b.color); root.setProperty('--t', b.bg); root.setProperty('--ci', b.ink);
   st.ctx = { aqi, profile: st.profile, dominant: dom, window: win, trend: tr, city: st.place.name, wx: st.wx };
 
-  const ind = !st.demo&&!st.stale?S.indiaModel24(st.data,c.time):null, wn = S.windNote(st.wx && st.wx.w, aqi);
+  const ind = !st.demo&&!st.stale?S.indiaModel24(st.data,c.time):null;
   const status = st.demo ? 'Sample data' : st.stale ? 'Offline snapshot' : 'Live';
   const trendLabel = { rising: '↗ Worsening', falling: '↘ Improving', steady: '→ Steady' }[tr];
   const ring=$('aqiring');ring.classList.remove('loadingring');ring.setAttribute('aria-label','US AQI '+Math.round(aqi));ring.style.setProperty('--p',Math.min(100,aqi/3));$('aqivalue').textContent=Math.round(aqi);
   $('aqimeta').textContent=st.place.name+' · '+status+' · '+c.time.replace('T',' ');
   $('aqiverdict').textContent=b.label+' · '+(st.demo||st.stale?'Reference only · not current':S.verdict(aqi,st.profile));
-  $('aqilead').textContent=(st.demo||st.stale?'Current guidance is unavailable.':a.go)+(dom?' Main driver: '+S.POLLUTANTS[dom].name+'.':'')+(wn?' '+wn:'');
-  $('aqichips').innerHTML=`<span class="chip2">${trendLabel}</span><span class="chip2" title="Modelled estimate, not a street monitor">Modelled data · Open-Meteo</span>${ind?`<span class="chip2" title="Partial model-based estimate using ${ind.pollutants.length} of eight pollutants, not official CPCB AQI">India scale (partial) ${ind.aqi} · ${esc(ind.label)}</span>`:''}${win?`<span class="chip2">Cleanest ${win.start.slice(11,16)}–${win.end.slice(11,16)}</span>`:''}<span class="chip2" id="weatherchip"${st.wx?'':' hidden'}>${st.wx?`${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h`:''}</span>`;
+  // Keep the immediate decision concise; the detailed advice is available in the tiles below.
+  $('aqilead').textContent=st.demo||st.stale?'Current guidance is unavailable.':a.go;
+  $('aqichips').innerHTML=`<span class="chip2">${trendLabel}</span>${dom?`<span class="chip2">Main driver: ${esc(S.POLLUTANTS[dom].name)}</span>`:''}<span class="chip2" title="Modelled estimate, not a street monitor">Modelled data · Open-Meteo</span>${ind?`<span class="chip2" title="Partial model-based estimate using ${ind.pollutants.length} of eight pollutants, not official CPCB AQI">India scale (partial) ${ind.aqi} · ${esc(ind.label)}</span>`:''}${win?`<span class="chip2">Cleanest ${win.start.slice(11,16)}–${win.end.slice(11,16)}</span>`:''}<span class="chip2" id="weatherchip"${st.wx?'':' hidden'}>${st.wx?`${st.wx.t}°C · ${st.wx.h}% · ${st.wx.w} km/h`:''}</span>`;
   $('goplan').disabled=!!(st.demo||st.stale);$('share').disabled=false;
   $('goplan').onclick = () => show('plan');
   $('share').onclick = async () => {
@@ -91,7 +94,7 @@ function render() {
   $('alert').innerHTML = !st.demo && !st.stale && a.symptoms ? `<div class="alert" role="alert">${esc(a.symptoms)}</div>` : '';
 
   const keys = ['pm2_5', 'pm10', 'nitrogen_dioxide', 'ozone', 'sulphur_dioxide', 'carbon_monoxide'];
-  $('pol').innerHTML = keys.filter(k => typeof c[k] === 'number').map(k => {
+  $('pol').innerHTML = keys.filter(k => Number.isFinite(c[k])&&c[k]>=0).map(k => {
     const P = S.POLLUTANTS[k], mean=(!st.demo&&!st.stale&&['pm2_5','pm10','nitrogen_dioxide','sulphur_dioxide','carbon_monoxide'].includes(k))?S.historicalMean(st.data,k,c.time,24):null;
     return `<div class="pol ${k === dom ? 'dom' : ''}"><b>${P.name}</b><small>${c[k].toFixed(1)} ${P.unit} · model estimate</small><span class="note">${esc(P.note)}${mean?' · 24h model mean '+mean.mean.toFixed(1)+' '+P.unit+'; '+S.whoRatio(k,mean.mean)+'× WHO 24h guideline':''}</span></div>`;
   }).join('');

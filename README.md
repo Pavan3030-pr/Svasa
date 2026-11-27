@@ -82,3 +82,5 @@ Model data are area estimates; OpenAQ readings are independent station observati
 Family profiles, reports and feedback stay on the device unless the user exports them. AI questions send selected coordinates, profile and bounded context to the backend and model provider. Background alerts store an explicitly subscribed fixed city and endpoint, expire after 30 days, and can be revoked. Physical-device notification delivery and independent participant usability remain to be confirmed.
 
 See [security and operational limits](docs/SECURITY.md), [product requirements](docs/PRD.md), [prompt engineering](docs/PROMPT-ENGINEERING.md) and [volunteer validation protocol](docs/USER-VALIDATION.md).
+
+Dashboard release hardening: current readings and offline snapshots must contain a valid timestamp and AQI. Invalid cached data falls back to clearly labelled sample data, and city changes immediately clear previous plans. The hero presents concise guidance and a separate dominant-pollutant chip; the detailed advice remains below. Production mobile browser coverage includes the landing preview and horizontal overflow.
