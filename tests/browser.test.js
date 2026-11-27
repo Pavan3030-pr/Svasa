@@ -16,6 +16,7 @@ const aqi=times.map((_,i)=>45+(i%12)*8),pm=aqi.map(x=>Math.round(x/3));
 const fixture={utc_offset_seconds:0,timezone:'GMT',current:{time:stamp(current),us_aqi:112,pm2_5:38,pm10:61,nitrogen_dioxide:16,ozone:40,sulphur_dioxide:4,carbon_monoxide:220,us_aqi_pm2_5:112},hourly:{time:times,us_aqi:aqi,pm2_5:pm}};
 const cors={'access-control-allow-origin':'*'};
 async function stub(page){
+  await page.route('**/api/health',r=>r.fulfill({json:{ok:true,ai:true,stations:true,backgroundPush:false}}));
   await page.route('https://air-quality-api.open-meteo.com/**',r=>r.fulfill({json:fixture,headers:cors}));
   await page.route('https://api.open-meteo.com/**',r=>r.fulfill({json:{current:{temperature_2m:26,relative_humidity_2m:62,wind_speed_10m:10}},headers:cors}));
   await page.route('**/api/stations?**',r=>r.fulfill({json:{station:{name:'Fixture monitor',pm25:35,pm10:62,distanceKm:3,ageHours:1,time:new Date().toISOString()}}}));

@@ -6,6 +6,7 @@ const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
 const WX = 'https://api.open-meteo.com/v1/forecast';
 const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask', 'family', 'reports'];
 const st = { profile: 'general', place: null, data: null, wx: null, demo: false, stale: null, ctx: null, lang: 'en', hist: [], serverAI: false };
+let capabilities=null;
 let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer;
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -155,19 +156,21 @@ async function reverse(lat, lon) {
 async function loadStation() {
   const p = st.place, gc = $('gcard'); gc.hidden = false; $('gs').textContent='Checking monitoring-station availability…'; if (!p || st.demo || st.stale || !location.protocol.startsWith('http')) { $('gs').textContent='Fresh model data required for a station comparison.'; return; }
   try {
+    const cfg=await getCapabilities();if(st.place!==p)return;
+    if(cfg&&cfg.stations===false){$('gs').textContent='Ground monitoring is not configured. Showing model estimates only.';return;}
     const r = await fetch(`/api/stations?lat=${p.lat}&lon=${p.lon}`); if (!r.ok) { if(st.place===p)$('gs').textContent='Station data unavailable. Showing model estimates only.';return; }
     const j = await r.json(); if (st.place === p&&st.data) drawStation(j.station);
   } catch (_) {if(st.place===p)$('gs').textContent='Station service unavailable. Showing model estimates only.';}
 }
 function drawStation(s) {
   const gc = $('gcard'), c = st.data.current; gc.hidden = false;
-  if (!s) { $('gs').innerHTML = '<p class="muted" style="margin:0">No monitoring station reporting PM2.5 within 25 km. Showing the model estimate only.</p>'; return; }
+  if (!s || !Number.isFinite(s.pm25) || s.pm25<0) { $('gs').innerHTML = '<p class="muted" style="margin:0">No monitoring station reporting PM2.5 within 25 km. Showing the model estimate only.</p>'; return; }
   const model = c.pm2_5, diff = s.pm25 > 0 && typeof model === 'number' ? Math.round((model - s.pm25) / s.pm25 * 100) : null;
   const age = s.ageHours == null ? '' : s.ageHours < 1 ? 'less than an hour ago' : Math.round(s.ageHours) + ' h ago';
   const fresh=s.ageHours!=null&&s.ageHours<=3;
   const v=!fresh?'Station reading is stale or its time is unknown; no comparison made.':diff===null?'Comparison unavailable.':`Model concentration is ${Math.abs(diff)}% ${diff>=0?'higher':'lower'} than the latest station reading. Locations and averaging periods may differ.`;
   const b=null;
-  $('gs').innerHTML = `<p class="lead" style="margin:0"><b>${esc(s.name)}</b> · ${s.distanceKm} km away${age ? ' · measured ' + esc(age) : ''}</p>
+  $('gs').innerHTML = `<p class="lead" style="margin:0"><b>${esc(s.name)}</b> · ${Number.isFinite(s.distanceKm)?s.distanceKm+' km away':'distance unavailable'}${age ? ' · measured ' + esc(age) : ''}</p>
     <div class="drv"><div><small>Station PM2.5</small><b>${s.pm25.toFixed(1)} µg/m³</b></div><div><small>Model PM2.5</small><b>${typeof model === 'number' ? model.toFixed(1) + ' µg/m³' : 'n/a'}</b></div><div><small>Station freshness</small><b>${fresh?'Recent':'Stale / unknown'}</b></div></div>
     <p class="muted">${esc(v)} Station PM2.5 is not an official AQI. Source: OpenAQ.</p>`;
 }
@@ -245,7 +248,7 @@ async function ask(q, en) {
   const sf = S.safety(q, st.lang); if (sf) { pushMsg('a', sf, 'urgent'); return; }
   if (!st.ctx || st.demo || st.stale) { pushMsg('a', 'Search a city first and I will answer from its live air data.'); return; }
   busy = true; const requestSeq=loadSequence, requestProfile=st.profile, requestLang=st.lang; const fb = S.answer(en || q, st.ctx), t = pushMsg('a', 'Thinking…', 'typing'); let result = null;
-  if (location.protocol.startsWith('http')) { try { result = await viaServer(q); } catch (_) {} }
+  if (location.protocol.startsWith('http') && (await getCapabilities())?.ai!==false) { try { result = await viaServer(q); } catch (_) {} }
   if(requestSeq!==loadSequence||requestProfile!==st.profile||requestLang!==st.lang){t.textContent='Context changed. Please ask again.';t.classList.remove('typing');busy=false;return;}
   const a=result&&result.answer; const text=a||('Local rule-based fallback (English; model data): '+fb);
   t.textContent=text; if(result&&result.sections&&result.evidence){t.textContent='';for(const [label,key] of [['Recommendation','recommendation'],['Why','reason'],['Limitations','limitation']]){const row=document.createElement('div'),heading=document.createElement('strong'),body=document.createElement('p');heading.textContent=label;body.textContent=result.sections[key];row.append(heading,body);t.append(row);}const evidence=document.createElement('small');evidence.textContent='Open-Meteo / CAMS · US AQI '+Math.round(result.evidence.aqi)+' · '+result.evidence.observedAt+' (UTC)';t.append(evidence);} t.classList.remove('typing'); t.dataset.source=result&&result.source||'local'; $('log').scrollTop = $('log').scrollHeight;
@@ -339,7 +342,8 @@ setAskLang('en');
 $('qs').onclick = e => { const b = e.target.closest('button'); if (b) ask(b.textContent, b.dataset.en); };
 $('af').onsubmit = e => { e.preventDefault(); const v = $('aq').value; $('aq').value = ''; ask(v); };
 pushMsg('a', 'Hi, I am Svasa. Ask me about the air in your city, when to go out, or whether you need a mask.');
-fetch('/api/health').then(r => r.json()).then(j => { st.serverAI = !!j.ai; $('aimode').textContent = j.ai ? 'Gemini on' : 'Rule-based answers'; }).catch(() => { $('aimode').textContent = 'Rule-based answers'; });
+function getCapabilities(){if(!capabilities)capabilities=fetch('/api/health',{signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)throw Error('Health unavailable');return r.json();}).catch(()=>{capabilities=null;return null;});return capabilities;}
+getCapabilities().then(j=>{st.serverAI=!!j?.ai;$('aimode').textContent=st.serverAI?'Gemini on':'Rule-based answers';});
 window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 setInterval(() => { if (st.place && !document.hidden && !busy) load(st.place); }, 5 * 60 * 1000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
