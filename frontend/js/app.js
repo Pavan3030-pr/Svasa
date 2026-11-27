@@ -35,11 +35,11 @@ function usableSnapshot(s){return !!(s&&Number.isFinite(s.at)&&s.at>0&&s.at<=Dat
 async function load(p) {
   const seq = ++loadSequence;historyReading=null;historyRequest=null;
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
-  st.ctx = null; st.data = null; invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
+  st.ctx = null; st.data = null; renderRail(null,[],null); invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
   $('aqiring').classList.add('loadingring');$('aqiring').setAttribute('aria-label','Air quality loading');$('aqiring').style.setProperty('--p',0);$('aqivalue').textContent='—';$('aqimeta').textContent='Retrieving model data';$('aqiverdict').textContent='Checking the air';$('aqilead').textContent='Loading current air data…';$('aqichips').innerHTML='<span class="chip2">Modelled data · Open-Meteo</span>';$('goplan').disabled=true;$('share').disabled=true;
   $('adv').textContent='Loading current guidance…';$('alert').textContent='';$('pol').textContent='Loading pollutant readings…';$('strip').textContent='Loading hourly forecast…';$('win').textContent='Loading forecast…';$('chart').textContent='';$('hist').textContent='';$('histtxt').textContent='Loading history…';$('disp').textContent='';st.hrs=[];
-  st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
+  st.place = p; pushRecent(p);renderSavedPlaces(); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
   st.wx=null;
   const cur = 'us_aqi,pm2_5,pm10,nitrogen_dioxide,ozone,sulphur_dioxide,carbon_monoxide,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide';
   try {
@@ -100,11 +100,38 @@ function render() {
   }).join('');
 
   $('win').textContent = win ? `Cleanest 2 hours: ${win.start.slice(11, 16)}–${win.end.slice(11, 16)} (AQI ~${win.avg})` : 'No forecast available';
-  st.hrs = hrs; drawStrip(hrs); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);loadHistory();}
+  renderRail(c,hrs,win);st.hrs = hrs; drawStrip(hrs); drawDisp(); if(location.hash==='#hourly'){drawChart(hrs,win);loadHistory();}
   $('btip').textContent = st.demo || st.stale ? 'Air quality is not current. Do not use these readings to decide where to exercise.' : S.effectiveLevel(aqi, st.profile) >= 2 ? `Air is poor right now (AQI ${Math.round(aqi)}). Practise indoors with windows closed.` : `Air is fine right now (AQI ${Math.round(aqi)}). Practise anywhere you feel calm.`;
   if (!st.demo && !st.stale) notifyCheck(aqi);
   if(location.hash==='#family')renderFamily(); if(location.hash==='#plan')renderActivityTimes();
 }
+// Decision rail uses the current verified model forecast, no extra provider requests.
+function renderRail(c,hrs,win){
+ const live=!!c&&!st.demo&&!st.stale,known=live?hrs.filter(x=>S.band(x.aqi)):[],over=known.filter(x=>x.aqi>100).length;
+ $('railwindow').textContent=live&&win?win.start.slice(11,16)+'–'+win.end.slice(11,16):'—';
+ $('railwindowdate').textContent=live&&win?(win.start.slice(0,10)===c.time.slice(0,10)?'Today':win.start.slice(0,10))+' · local time':'Fresh forecast required';
+ $('railavg').textContent=live&&win?win.avg:'—';$('railpeak').textContent=live&&win?Math.round(win.peak):'—';
+ $('railwindowadvice').textContent=live&&win?(S.effectiveLevel(win.peak,st.profile)>=2?'Even this window needs caution; consider an indoor alternative.':'Lower forecast pollution does not mean risk-free.'):'Forecast estimates may change.';
+ $('railplan').disabled=!(live&&win);
+ $('raillow').textContent=known.length?Math.round(Math.min(...known.map(x=>x.aqi))):'—';
+ $('railhigh').textContent=known.length?Math.round(Math.max(...known.map(x=>x.aqi))):'—';
+ $('railmeterfill').style.width=(known.length?100*over/known.length:0)+'%';
+ $('railmeter').setAttribute('aria-label',known.length?over+' of '+known.length+' available forecast hours above US AQI 100':'Forecast unavailable');
+ $('railcoverage').textContent=known.length?over+' of '+known.length+' available hours above US AQI 100.':'Fresh forecast required.';
+ $('railprofile').textContent=live?S.PROFILES[st.profile].name+': '+S.advice(c.us_aqi,st.profile).go:'Current profile guidance requires fresh data.';
+ renderSavedPlaces();
+}
+let savedPlaces=store.get('svasa_saved_places',[]);
+if(!Array.isArray(savedPlaces))savedPlaces=[];
+savedPlaces=savedPlaces.filter(x=>x&&typeof x.name==='string'&&Number.isFinite(x.lat)&&Number.isFinite(x.lon)&&Math.abs(x.lat)<=90&&Math.abs(x.lon)<=180).slice(0,5);
+const samePlace=(x,y)=>!!x&&!!y&&Math.abs(x.lat-y.lat)<.001&&Math.abs(x.lon-y.lon)<.001;
+function renderSavedPlaces(){
+ const saved=savedPlaces.some(x=>samePlace(x,st.place)),list=$('railplaces');$('railsave').disabled=!st.place||saved||savedPlaces.length>=5;$('railsave').textContent=saved?'Saved':'Save city';
+ list.innerHTML=savedPlaces.length?savedPlaces.map((x,i)=>'<div class="railplace"><button type="button" data-place="'+i+'">'+esc(x.name)+'</button><button type="button" class="btn ghost sm" data-unsave="'+i+'" aria-label="Remove '+esc(x.name)+'">Remove</button></div>').join(''):'<p class="muted">Save your home, work or family city for quick access.</p>';
+}
+$('railsave').onclick=()=>{if(!st.place||savedPlaces.length>=5||savedPlaces.some(x=>samePlace(x,st.place)))return;const next=[...savedPlaces,{name:st.place.name,lat:st.place.lat,lon:st.place.lon}];if(!store.set('svasa_saved_places',next)){$('railplacestatus').textContent='Could not save on this device.';return;}savedPlaces=next;renderSavedPlaces();$('railplacestatus').textContent='City saved on this device.';inbox?.emit('Location saved','Open your saved locations from Today.','today');};
+$('railplaces').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.place!==undefined){const place=savedPlaces[Number(b.dataset.place)];if(place){load(place);show('today');}}else if(b.dataset.unsave!==undefined){const next=savedPlaces.filter((_,i)=>i!==Number(b.dataset.unsave));if(store.set('svasa_saved_places',next)){savedPlaces=next;renderSavedPlaces();$('railplacestatus').textContent='Location removed.';}else $('railplacestatus').textContent='Could not remove location.';}};
+$('railplan').onclick=()=>show('plan');$('railforecast').onclick=()=>show('hourly');$('railcompare').onclick=()=>show('cities');
 function drawChart(h, win) {
   if (!h.length) { $('chart').innerHTML = '<p class="muted">No hourly forecast available.</p>'; return; }
   const L = 34, W = Math.max(680, h.length * 26 + L + 8), H = 220, top = 18, base = H - 28;
@@ -348,7 +375,7 @@ $('notif').onclick = async () => {
   alertsOn = (await Notification.requestPermission()) === 'granted';store.set('svasa_device_alerts',alertsOn);$('notif').textContent = alertsOn ? 'Disable device alerts while open' : 'Device alerts blocked';if(alertsOn){inbox?.emit('Device alerts enabled','Air-quality changes can now appear as device notifications while Svasa is open.','today');show_('Svasa · Device alerts enabled','You can manage alerts from the notification bell.');}
 };
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; $('inst').hidden = false; });
-$('inst').onclick = async () => { if (deferredInstall) { deferredInstall.prompt(); deferredInstall = null; $('inst').hidden = true; } };
+$('inst').onclick = async () => { if (deferredInstall) { const prompt=deferredInstall;deferredInstall=null;$('inst').hidden=true;try{await prompt.prompt();await prompt.userChoice;}catch(_){} } };addEventListener('appinstalled',()=>{deferredInstall=null;$('inst').hidden=true;});
 $('lang').innerHTML = Object.entries(S.LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
 $('lang').onchange = e => { st.lang = e.target.value; setAskLang(st.lang); };
 setAskLang('en');

@@ -24,7 +24,7 @@
  $('notificationread').onclick=()=>{state.items=state.items.map(x=>({...x,read:true}));save();};
  $('notificationclear').onclick=()=>{state={items:[],clearedAt:Date.now()};save();};
  $('notificationlist').onclick=e=>{const b=e.target.closest('button[data-id]'),x=b&&state.items.find(v=>v.id===b.dataset.id);if(!x)return;x.read=true;save();dialog.close();show(x.view);};
- $('notificationsettings').onclick=()=>{dialog.close();show('today');$('notif').scrollIntoView({block:'center'});$('notif').focus();};
+ $('notificationsettings').onclick=()=>{const panel=$('alertsettings'),open=panel.hidden;panel.hidden=!open;$('notificationsettings').setAttribute('aria-expanded',String(open));if(open){root.dispatchEvent(new Event('svasa-alert-settings'));panel.scrollIntoView({block:'nearest'});}};
  root.addEventListener('storage',e=>{if(e.key===key){state=read();paint();}});
  root.addEventListener('focus',sync);document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync();});
  if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-inbox-update'){receive(e.data.entry);sync();}});
@@ -38,7 +38,7 @@ let pushConfig=null;
 const pushStatus=s=>{$('pushstatus').textContent=s;};
 async function pushApi(body){const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw Error('Background alert service unavailable');return r.json();}
 async function initPush(){
- if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window))return;
+ if(!('serviceWorker'in navigator)||!('PushManager'in window)||!('Notification'in window)){pushStatus('Background push is unavailable in this browser.');return;}
  try{
   const r=await fetch('/api/push');if(!r.ok)return;pushConfig=await r.json();
   const existing=store.get('svasa_push',null);
@@ -74,8 +74,7 @@ $('pushoff').onclick=async()=>{
 $('pushtest').onclick=async()=>{const old=store.get('svasa_push',null);if(!old)return;const button=$('pushtest');button.disabled=true;try{await pushApi({action:'test',endpoint:old.endpoint,token:old.token});$('pushreceived').hidden=false;pushStatus('Test accepted by the push service. Check your device notifications, then confirm receipt only if you actually saw it.');}catch(_){pushStatus('Test could not be sent. Check your subscription or retry after five minutes.');}finally{button.disabled=false;}};
 $('pushreceived').onclick=()=>{store.set('svasa_push_receipt',{confirmedAt:new Date().toISOString(),method:'user-confirmed'});$('pushreceived').hidden=true;pushStatus('Receipt confirmed by you on this device.');};
 if('serviceWorker'in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data?.type==='svasa-test-shown'){ $('pushreceived').hidden=false;pushStatus('The browser displayed a test notification. Confirm only if you saw it.');}});
-const alertsPanel=$('pushon').closest('.card');
-if('IntersectionObserver'in window){const observer=new IntersectionObserver(entries=>{if(entries.some(x=>x.isIntersecting)){observer.disconnect();initPush();}},{rootMargin:'160px'});observer.observe(alertsPanel);}else initPush();
+root.addEventListener('svasa-alert-settings',initPush);
 
 
 }};})(window);
