@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '26'
-      - name: Verify deployed public endpoints and configured providers
+      - name: Verify deployed public endpoints and assistant resilience
         run: node tests/production-smoke.js
       - name: Upload production evidence
         if: always()

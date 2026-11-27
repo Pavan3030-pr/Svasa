@@ -1,0 +1,24 @@
+name: SVASA strict live Gemini evaluation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  live-evaluation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Require live Gemini output in all five languages
+        env:
+          SVASA_STRICT_LIVE_AI: '1'
+        run: node tests/production-smoke.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: strict-live-gemini-evidence
+          path: production-artifacts/
+          if-no-files-found: ignore
