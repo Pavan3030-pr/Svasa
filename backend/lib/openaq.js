@@ -22,31 +22,32 @@ async function findLocations(lat, lon) {
     const ok = (j.results || [])
       .filter(l => l && l.coordinates && typeof l.coordinates.latitude === 'number' && typeof l.coordinates.longitude === 'number')
       .map(l => ({ l, d: km(lat, lon, l.coordinates.latitude, l.coordinates.longitude) }))
-      .filter(x => x.d <= 26);
+      .filter(x => x.d <= 25);
     if (ok.length) return ok.sort((a, b) => a.d - b.d);
   }
   return [];
 }
 async function nearest(lat, lon) {
-  const key = lat.toFixed(1) + ',' + lon.toFixed(1), hit = cache.get(key);
-  if (hit && Date.now() - hit.t < 10 * 60 * 1000) return hit.v;
+  const key = lat.toFixed(4) + ',' + lon.toFixed(4), hit = cache.get(key);
+  if (hit && Date.now() - hit.t < 10 * 60 * 1000) return hit.v ? {...hit.v,ageHours:hit.v.time?Math.max(0,(Date.now()-Date.parse(hit.v.time))/3600000):null}:null;
   let out = null;
   for (const { l, d } of (await findLocations(lat, lon)).slice(0, 5)) {
     let sensors = l.sensors;
     if (!Array.isArray(sensors) || !sensors.length) { try { sensors = (await oq('/locations/' + l.id + '/sensors')).results || []; } catch (_) { sensors = []; } }
     const map = {}; for (const s of sensors) map[s.id] = pname(s);
     if (!Object.values(map).includes('pm25')) continue;
-    const vals = {}; let time = null;
+    const vals = {}, times = {}; 
     for (const r of (await oq('/locations/' + l.id + '/latest')).results || []) {
       const n = map[r.sensorsId];
       if ((n === 'pm25' || n === 'pm10') && typeof r.value === 'number' && r.value >= 0 && r.value < 2000) {
-        vals[n] = r.value; const t = typeof r.datetime === 'string' ? r.datetime : r.datetime && r.datetime.utc;
-        if (t && (!time || t > time)) time = t;
+        const t = typeof r.datetime === 'string' ? r.datetime : r.datetime && r.datetime.utc;
+        if(!t||!Number.isFinite(Date.parse(t))||Date.parse(t)>Date.now()+300000)continue;
+        if(!times[n]||Date.parse(t)>Date.parse(times[n])){vals[n]=r.value;times[n]=t;}
       }
     }
     if (typeof vals.pm25 === 'number') {
-      const age = time && isFinite(Date.parse(time)) ? Math.max(0, Math.round((Date.now() - Date.parse(time)) / 360000) / 10) : null;
-      out = { id: l.id, name: String(l.name || 'Monitoring station').slice(0, 80), distanceKm: Math.round(d * 10) / 10, pm25: vals.pm25, pm10: typeof vals.pm10 === 'number' ? vals.pm10 : null, time, ageHours: age };
+      const time=times.pm25; const age = time && isFinite(Date.parse(time)) ? Math.max(0, Math.round((Date.now() - Date.parse(time)) / 360000) / 10) : null;
+      out = { id: l.id, name: String(l.name || 'Monitoring station').slice(0, 80), distanceKm: Math.round(d * 10) / 10, pm25: vals.pm25, pm10: typeof vals.pm10 === 'number' ? vals.pm10 : null, pm10Time:times.pm10||null, time, ageHours: age };
       break;
     }
   }

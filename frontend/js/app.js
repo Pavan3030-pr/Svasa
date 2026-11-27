@@ -4,7 +4,7 @@ const S = window.Svasa, $ = id => document.getElementById(id);
 const AQ = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
 const WX = 'https://api.open-meteo.com/v1/forecast';
-const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask', 'family'];
+const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask', 'family', 'reports'];
 const st = { profile: 'general', place: null, data: null, wx: null, demo: false, stale: null, ctx: null, lang: 'en', hist: [], serverAI: false };
 let busy = false, cmp = [], lastLvl = null, alertsOn = false, deferredInstall = null, suggTimer;
 
@@ -31,7 +31,7 @@ let loadSequence = 0;
 async function load(p) {
   const seq = ++loadSequence;
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
-  st.ctx = null; st.data = null; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
+  st.ctx = null; st.data = null; invalidatePlan(); $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = true;
   $('hero').textContent = 'Loading current air data…';
   st.place = p; pushRecent(p); $('q').value = ''; $('city').textContent = p.name; $('v-today').classList.add('loading'); banner('');
@@ -137,8 +137,8 @@ function drawDisp() {
 function tip(e) {
   const g = e.target.closest && e.target.closest('g[data-i]'), t = $('tip');
   const x = g && st.hrs && st.hrs[+g.dataset.i]; if (!x) { t.hidden = true; return; }
-  const v = Math.round(x.aqi || 0), h = +x.time.slice(11, 13), b = S.band(v);
-  t.innerHTML = `<b>${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00</b><br>AQI ${v} · ${esc(b.label)}` + (typeof x.pm2_5 === 'number' ? `<br>PM2.5 ${x.pm2_5.toFixed(0)} µg/m³` : '');
+  const b = S.band(x.aqi), v = b?Math.round(x.aqi):'Unavailable', h = +x.time.slice(11, 13);
+  t.innerHTML = `<b>${String(h).padStart(2, '0')}:00–${String((h + 1) % 24).padStart(2, '0')}:00</b><br>AQI ${v} · ${esc(b?b.label:'Missing data')}` + (typeof x.pm2_5 === 'number' ? `<br>PM2.5 ${x.pm2_5.toFixed(0)} µg/m³` : '');
   t.hidden = false; t.style.left = Math.max(8, Math.min(innerWidth - 240, e.clientX + 12)) + 'px'; t.style.top = Math.max(8, e.clientY - 70) + 'px';
 }
 ['pointerover', 'pointermove', 'pointerdown'].forEach(ev => $('chart').addEventListener(ev, tip));
@@ -149,23 +149,23 @@ async function reverse(lat, lon) {
 }
 
 async function loadStation() {
-  const p = st.place, gc = $('gcard'); gc.hidden = true; if (!p || st.demo || !location.protocol.startsWith('http')) return;
+  const p = st.place, gc = $('gcard'); gc.hidden = false; $('gs').textContent='Checking monitoring-station availability…'; if (!p || st.demo || st.stale || !location.protocol.startsWith('http')) { $('gs').textContent='Fresh model data required for a station comparison.'; return; }
   try {
-    const r = await fetch(`/api/stations?lat=${p.lat}&lon=${p.lon}`); if (!r.ok) return;
-    const j = await r.json(); if (st.place === p) drawStation(j.station);
-  } catch (_) {}
+    const r = await fetch(`/api/stations?lat=${p.lat}&lon=${p.lon}`); if (!r.ok) { if(st.place===p)$('gs').textContent='Station data unavailable. Showing model estimates only.';return; }
+    const j = await r.json(); if (st.place === p&&st.data) drawStation(j.station);
+  } catch (_) {if(st.place===p)$('gs').textContent='Station service unavailable. Showing model estimates only.';}
 }
 function drawStation(s) {
   const gc = $('gcard'), c = st.data.current; gc.hidden = false;
   if (!s) { $('gs').innerHTML = '<p class="muted" style="margin:0">No monitoring station reporting PM2.5 within 25 km. Showing the model estimate only.</p>'; return; }
   const model = c.pm2_5, diff = s.pm25 > 0 && typeof model === 'number' ? Math.round((model - s.pm25) / s.pm25 * 100) : null;
   const age = s.ageHours == null ? '' : s.ageHours < 1 ? 'less than an hour ago' : Math.round(s.ageHours) + ' h ago';
-  let v = diff === null ? '' : Math.abs(diff) <= 20 ? 'The model and the station agree closely.' : diff > 0 ? `The model reads ${diff}% higher than this station, so air near the station is cleaner than the estimate.` : `The model reads ${Math.abs(diff)}% lower than this station, so air near the station is worse than the estimate.`;
-  if (s.ageHours != null && s.ageHours > 24) v += ' This reading is more than a day old.';
-  const aqi = S.pm25ToAqi(s.pm25), b = aqi == null ? null : S.band(aqi);
+  const fresh=s.ageHours!=null&&s.ageHours<=3;
+  const v=!fresh?'Station reading is stale or its time is unknown; no comparison made.':diff===null?'Comparison unavailable.':`Model concentration is ${Math.abs(diff)}% ${diff>=0?'higher':'lower'} than the latest station reading. Locations and averaging periods may differ.`;
+  const b=null;
   $('gs').innerHTML = `<p class="lead" style="margin:0"><b>${esc(s.name)}</b> · ${s.distanceKm} km away${age ? ' · measured ' + esc(age) : ''}</p>
-    <div class="drv"><div><small>Station PM2.5</small><b>${s.pm25.toFixed(1)} µg/m³</b></div><div><small>Model PM2.5</small><b>${typeof model === 'number' ? model.toFixed(1) + ' µg/m³' : 'n/a'}</b></div>${b ? `<div><small>Station ≈ US AQI</small><b style="color:${b.ink}">${aqi}</b></div>` : ''}</div>
-    <p class="muted">${esc(v)} Station values are hourly readings, so the AQI shown is what that PM2.5 would score if it lasted. Source: OpenAQ.</p>`;
+    <div class="drv"><div><small>Station PM2.5</small><b>${s.pm25.toFixed(1)} µg/m³</b></div><div><small>Model PM2.5</small><b>${typeof model === 'number' ? model.toFixed(1) + ' µg/m³' : 'n/a'}</b></div><div><small>Station freshness</small><b>${fresh?'Recent':'Stale / unknown'}</b></div></div>
+    <p class="muted">${esc(v)} Station PM2.5 is not an official AQI. Source: OpenAQ.</p>`;
 }
 
 /* ---------- cities ---------- */
@@ -344,12 +344,15 @@ $('onb').hidden = !!store.get('svasa_onb', 0);
 
 
 /* ---------- personal day and family ---------- */
+let currentPlan=null;
 let activities=[{name:'Commute',duration:1,preferred:0,flex:2}];
 let family=store.get('svasa_family',[]);
 if(!Array.isArray(family))family=[];
 family=family.filter(x=>x&&typeof x.name==='string'&&Object.hasOwn(S.PROFILES,x.profile)).slice(0,6);
 const forecast=()=>st.data&&!st.demo&&!st.stale?S.hourlyFrom(st.data,st.data.current.time):[];
+function invalidatePlan(){currentPlan=null;$('saveplan').disabled=true;}
 function renderActivityTimes(){
+  invalidatePlan();
   const hrs=forecast(), box=$('activities');
   box.innerHTML=activities.map((x,i)=>{
     const choices=hrs.map((t,j)=>'<option value="'+j+'"'+(j===x.preferred?' selected':'')+'>'+esc(t.time.replace('T',' '))+'</option>').join('');
@@ -358,13 +361,14 @@ function renderActivityTimes(){
   $('addactivity').disabled=activities.length>=4;
   $('optimizeday').disabled=!hrs.length||!activities.length;
 }
-$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);$('dayresult').textContent='Plan changed. Optimize again.';};
+$('activities').onchange=e=>{const d=e.target.dataset;if(!d.field||!activities[d.i])return;activities[d.i][d.field]=d.field==='name'?e.target.value:Number(e.target.value);invalidatePlan();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)return;activities.splice(Number(b.dataset.remove),1);renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('addactivity').onclick=()=>{if(activities.length>=4)return;activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('optimizeday').onclick=()=>{
   const hrs=forecast(), items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
-  const plan=S.optimizeDay(hrs,items,st.profile);
+  invalidatePlan();const plan=S.optimizeDay(hrs,items,st.profile);
   if(!plan){$('dayresult').textContent='No feasible schedule with complete data. Widen time flexibility, shorten durations or change preferred times.';return;}
+  currentPlan={createdAt:new Date().toISOString(),city:st.place.name,profile:st.profile,exposure:plan.exposure,baseline:plan.baseline,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
   const change=plan.changePct==null?'Original schedule unavailable or overlapping.':(plan.changePct>=0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
   $('dayresult').innerHTML='<p class="section-kicker">YOUR PROPOSED SCHEDULE</p><h3>'+plan.exposure.toFixed(1)+' µg·h/m³</h3><p>'+esc(change)+'</p>'+plan.slots.map((x,i)=>'<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>').join('')+(plan.risk?'<p class="alert">Some windows still need caution. Consider moving those activities indoors.</p>':'');
 };
@@ -377,6 +381,20 @@ $('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value
 $('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){family.splice(Number(b.dataset.familyRemove),1);store.set('svasa_family',family);renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;st.profile=x.profile;$('profile').value=x.profile;if(st.data)render();show('today');}};
 $('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderFamily();};
 renderActivityTimes();renderFamily();
+
+let reports=store.get('svasa_reports',[]);
+if(!Array.isArray(reports))reports=[];
+function recentReports(){const cutoff=Date.now()-7*86400000;return reports.filter(x=>x&&Date.parse(x.createdAt)>=cutoff&&Number.isFinite(x.exposure)&&typeof x.city==='string').slice(0,100);}
+function renderReports(){
+  const entries=recentReports();
+  $('reportsummary').textContent=entries.length?entries.length+' saved projected schedules · '+entries.filter(x=>x.changePct>0).length+' lower than their preferred schedule.':'No saved plans yet. Optimize a day and choose Save projected schedule.';
+  $('reportlist').innerHTML=entries.map(x=>'<article class="reportentry"><h3>'+esc(x.city)+'</h3><small>'+esc(new Date(x.createdAt).toLocaleString())+'</small><p><strong>'+x.exposure.toFixed(1)+' µg·h/m³</strong> projected concentration-time proxy'+(Number.isFinite(x.changePct)?' · '+x.changePct+'% reduction versus preferred schedule':'')+'</p><p class="muted">Model forecast, not measured personal exposure.</p></article>').join('');
+  $('exportreport').disabled=!entries.length;$('clearreport').disabled=!reports.length;
+}
+$('saveplan').onclick=()=>{if(!currentPlan||!forecast().length)return;reports=[currentPlan,...recentReports()].slice(0,100);store.set('svasa_reports',reports);invalidatePlan();renderReports();show('reports');};
+$('clearreport').onclick=()=>{reports=[];store.set('svasa_reports',reports);renderReports();};
+$('exportreport').onclick=()=>{const data={method:'Projected outdoor PM2.5 concentration × hours; not actual exposure or inhaled dose',plans:recentReports()};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='svasa-projected-plans.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+renderReports();
 
 /* ---------- boot ---------- */
 show(location.hash.slice(1));

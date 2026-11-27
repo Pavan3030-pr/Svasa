@@ -81,3 +81,5 @@ Air data comes from Open-Meteo (CAMS model estimates), not ground monitors. Guid
 
 ## SVASA 4 upgrade branch
 The Smart Day Planner minimizes caution windows first and outdoor PM2.5 concentration-time proxy second, using up to four ordered activities with fixed or flexible timing. This proxy is not an inhaled dose or a predicted health outcome. Family profiles stay in browser storage. India NAQI display and direct current-to-WHO comparisons are withheld pending scientifically valid coverage and averaging. Alerts are in-app only.
+
+The assistant now accepts `{q,place:{lat,lon},ctx:{profile,lang,hist}}` and fetches its own model context in UTC. The evidence object identifies the provider and observation time; this is not independently measured ground truth. Reports save explicitly selected forecast-based schedules locally for seven-day review and JSON export. Station data has sensor-specific timestamps and is compared only when recent. No true background push or official India NAQI is claimed.

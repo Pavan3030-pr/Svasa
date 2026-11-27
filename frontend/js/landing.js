@@ -21,7 +21,7 @@ async function run() {
     const hrs = S.hourlyFrom(d, d.current.time); paintHero(d.current.us_aqi, S.bestWindow(hrs, 2));
   } catch (_) {}
   const out = await Promise.all(CITIES.map(async c => { try { const d = await get(URL_(c[1], c[2])); return { name: c[0], aqi: d.current.us_aqi }; } catch (_) { return null; } }));
-  const ok = out.filter(x => x && typeof x.aqi === 'number');
+  const ok = out.filter(x => x && S.band(x.aqi));
   $('ticker').innerHTML = ok.map(x => { const b = S.band(x.aqi); return `<div class="tk" style="--c:${b.color}"><small>${esc(x.name)}</small><b style="color:${b.ink}">${Math.round(x.aqi)}</b><span>${esc(b.label)}</span></div>`; }).join('');
   $('tickNote').textContent = ok.length ? 'Modelled estimates from Open-Meteo / CAMS, refreshed when you open the page. Not a street monitor.' : 'Live readings are unavailable right now. Open the app to try again.';
 }
