@@ -1,42 +1,79 @@
-# SVASA · Personal air intelligence
+# SVASA · Personal Air Intelligence
 
-**Know your air. Plan your day.** SVASA is a responsive, installable air-quality decision aid that turns environmental data into practical outdoor-planning guidance. It does not diagnose conditions or measure personal exposure.
+**Don't just monitor the air. Plan a better day.**
 
-[Live application](https://svasa-sage.vercel.app/) · [Automated verification](https://github.com/Pavan3030-pr/Svasa/actions) · [Judge demonstration](docs/DEMO.md)
+SVASA turns air-quality forecasts into practical, constraint-aware outdoor decisions. Compare alternative routines, keep fixed commitments, review changing forecasts, protect family members and record completed plans. Built as an installable, responsive web application with a premium light interface.
 
-## What makes it different
+[**Live application**](https://svasa-sage.vercel.app/) · [Automated verification](https://github.com/Pavan3030-pr/Svasa/actions) · [90-second judge demo](docs/DEMO.md) · [Release evidence](docs/RELEASE-EVIDENCE.md)
 
-The Smart Day Planner first minimizes caution windows, then the modelled PM2.5 concentration-time proxy, for up to four flexible activities. It compares the proposed schedule with the preferred schedule and explains the trade-off. The proxy is not an inhaled dose or health outcome.
+## Application gallery
 
-| Module | Function |
+<!-- SVASA_GALLERY_START -->
+The original screenshots are restored below while the new verified browser capture workflow publishes the updated interface. These images are from an earlier release; see the [latest browser evidence](https://github.com/Pavan3030-pr/Svasa/actions) for current captures.
+
+### Landing page
+![SVASA landing page](docs/screenshots/landing.png)
+
+### Air-quality dashboard
+![SVASA dashboard](docs/screenshots/today.png)
+
+| Day planner | Forecast |
+|:---:|:---:|
+| ![Planner](docs/screenshots/planner.png) | ![Forecast](docs/screenshots/forecast.png) |
+
+| AI assistant | City comparison |
+|:---:|:---:|
+| ![Assistant](docs/screenshots/assistant.png) | ![Cities](docs/screenshots/cities.png) |
+
+### Guided breathing
+![Breathing view](docs/screenshots/breathe.png)
+
+| Mobile landing | Mobile dashboard |
+|:---:|:---:|
+| <img src="docs/screenshots/landing-mobile.png" width="300" alt="Mobile landing page"> | <img src="docs/screenshots/today-mobile.png" width="300" alt="Mobile dashboard"> |
+<!-- SVASA_GALLERY_END -->
+
+## What makes SVASA different
+
+| Capability | What it does |
 |---|---|
-| Today | Live modelled US AQI, pollutant details, nearby ground readings, profile-aware precautions |
-| Forecast | Hourly outlook, lower-pollution window and seven-day AQI history |
-| Planner | Commute/workout window and multi-activity optimization |
-| Family / cities | Local family profiles and live city comparison |
-| Ask | Grounded Gemini answers in five languages with emergency bypass and labelled deterministic fallback |
-| Breathing | Guided relaxation exercise |
-| Reports | Local projected plans, export, optional usability feedback |
-| Alerts | In-app notifications and opt-in daily background push; manual test receipt confirmation |
-| Offline | Last saved model snapshot or clearly labelled sample; current advice and planning blocked |
+| **Parallel Futures** | Compare preferred and optimized activities side by side with a transparent projected outdoor PM2.5 concentration-time proxy. |
+| **Adaptive Day** | Re-evaluate a saved schedule against refreshed forecasts; preserve fixed commitments and review changes before accepting. One locally saved plan can be restored for up to 48 hours. |
+| **AirTrust** | Show forecast coverage, ground-station freshness, proximity and material source disagreement without inventing a confidence probability. |
+| **Family Protection** | Rank a shared one-hour window by the number of profiles needing caution, then PM2.5 and AQI. |
+| **AI decision verification** | Ground Gemini answers in server-verified air data; check response structure, language script, numerical claims and selected safety constraints. Emergency bypass and labelled fallback remain available. |
+| **Impact Ledger** | Record saved projected schedules and self-reported completion, with undo and optional local export. |
+
+The planner uses dynamic programming to find an exact optimum under either of two priorities: after minimizing caution activities, minimize the forecast concentration-time proxy or the total hours shifted. Fixed commitments stay fixed. It supports up to four ordered outdoor activities. Neither the proxy nor completion is measured exposure, an inhaled dose or a health outcome.
+
+Other modules: live model dashboard, hourly and historical forecast, trip planning, city comparison, guided breathing, multilingual assistant, notifications and opt-in daily push, offline snapshots with stale-data planning disabled, and PWA installation where supported.
 
 ## Architecture
 
-```
-Browser (HTML, CSS, generated JS bundles, service worker)
-  ├─ Open-Meteo / CAMS air model and forecasts
-  ├─ Open-Meteo geocoding and weather
+```text
+Browser · responsive HTML/CSS · generated JS · service worker
+  ├─ Open-Meteo / CAMS → model air quality, forecast, geocoding, weather
   └─ Vercel APIs / Node server
-       ├─ verified server-side air context → Gemini / rule guidance
-       ├─ OpenAQ ground measurements
-       └─ Upstash Redis → rate limits, push subscriptions, daily dispatch
+       ├─ Server-verified air context → Gemini / deterministic guidance
+       ├─ OpenAQ → nearby ground observations
+       └─ Upstash Redis → rate limits, provider budget, push subscriptions
 ```
 
-`frontend/js/core.js` is shared pure logic. Reports and notification controls live in dedicated modules; generated browser bundles avoid extra requests. The app has one direct runtime dependency, locked with integrity hashes. The service worker never caches API responses.
+Shared decision logic: `frontend/js/core.js` and `frontend/js/intelligence.js`. Reports and notifications have dedicated modules. Browser bundles and inline style CSP hashes are synchronized by checked scripts. The service worker never caches API responses. One direct runtime dependency is locked with integrity hashes.
+
+## Verification
+
+- [GitHub Actions](https://github.com/Pavan3030-pr/Svasa/actions): unit, contract, outage, security, desktop/mobile browser and real production journeys. Automated axe WCAG A/AA checks reject detected violations in tested views.
+- [Release evidence](docs/RELEASE-EVIDENCE.md): the seeded 500-case exhaustive optimizer comparison passed on commit `ecdd6e4` (488 feasible cases and 23,470 enumerated candidate schedules). Synthetic validation only.
+- Lighthouse gates require at least 90 performance, 100 accessibility, 95 best practices and 95 SEO for tested pages; these are engineering floors, not promises of perfect field scores.
+- The production capacity test covers 24 read-only requests at four concurrent clients, not maximum-scale load.
+- The strict five-language Gemini evaluation requires actual model responses; explicit fallback is not a live-model pass. Provider rate limits are respected, reported and retried within bounds.
+
+Screenshots captured by the fixture browser suite document actual rendered UI with controlled data, not clinical evidence, live readings or real participant feedback. See the current CI artifacts for independent live production browser evidence.
 
 ## Run locally
 
-Use Node 26.x (as pinned in package.json). Run:
+Node 26.x, as pinned in package.json:
 
 ```sh
 npm ci
@@ -45,21 +82,22 @@ npm start
 # http://localhost:8080
 ```
 
-The air dashboard works without a Gemini key. Optional services are enabled by environment variables:
+The dashboard works without a Gemini key; optional backend services use these server environment variables.
 
 | Variable | Purpose |
 |---|---|
-| GEMINI_API_KEY / GEMINI_MODEL | Live model answers; default model gemini-2.5-flash |
-| OPENAQ_API_KEY | Ground stations |
-| UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN | Distributed limits and push storage (KV_REST aliases also supported) |
-| VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT | Push identity |
-| CRON_SECRET | Authenticated scheduler |
-| PUSH_MAX_SUBSCRIPTIONS | Default 60, allowed 20–120; bounded daily service |
-| PORT | Local port, default 8080 |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | Live model responses; default gemini-2.5-flash |
+| `GEMINI_DAILY_LIMIT` | Shared daily outbound attempt limit, default 300 |
+| `OPENAQ_API_KEY` | Ground station observations |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Distributed limits and push storage; KV_REST aliases supported |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Push identity |
+| `CRON_SECRET` | Authenticated scheduler |
+| `PUSH_MAX_SUBSCRIPTIONS` | Default 60; allowed 20–120 |
+| `PORT` | Local port, default 8080 |
 
-Keep secrets in server environment variables, never browser code or Git. Deploy by importing this repository in Vercel and setting production variables. The configured daily cron checks subscribed fixed cities, not moving locations.
+Keep secrets out of Git and browser code. Import the repository into Vercel and configure production environment variables. The daily cron checks subscribed fixed cities, not moving locations.
 
-After editing CSS or JS source, regenerate checked-in browser assets as applicable:
+After changing CSS or JS, regenerate checked-in assets:
 
 ```sh
 npm run sync:styles
@@ -67,30 +105,10 @@ npm run sync:landing
 npm run sync:app
 ```
 
-## Verification and evidence
+## Safety and privacy
 
-GitHub Actions runs syntax, pure logic, server, API, failure-mode and browser fixture tests; real Chromium journeys against the exact deployed commit; and local plus deployed Lighthouse audits. Inspect the latest workflow artifacts for current screenshots, accessibility results and metrics. Older illustrative screenshots in docs/screenshots are not current release evidence.
+Model forecasts are area estimates; station readings may differ in location and averaging period. The India-scale indicator is partial, not official CPCB AQI. Guidance is precautionary, not medical advice. AI queries send selected coordinates, profile and bounded context to the server/model provider. Family profiles, adaptive plans, reports and voluntary feedback stay on-device unless exported. Optional push subscriptions store a fixed city and endpoint, expire after 30 days and can be revoked.
 
-The bounded capacity test uses 24 read-only requests with four concurrent clients. A separate fixture test coalesces 100 identical first-turn requests. Push dispatch uses a 12-worker pool, fixture-tested with 60 subscriptions. These are not large-scale production load tests.
+Independent clinical, security and native-language semantic review, physical-device push delivery and genuine participant usability remain unverified. The project does not claim world-first functionality or guaranteed safety.
 
-The automatic release test checks verified Gemini responses or correctly labelled deterministic fallback. A separate strict live Gemini workflow requires actual model responses in all five languages. External provider outages or quota restrictions are reported, not counted as live model success.
-
-## Data, safety and privacy
-
-Model data are area estimates; OpenAQ readings are independent station observations, with age and distance disclosed. India-scale AQI is a partial model estimate, not official CPCB AQI. Forecasts can change. Sensitive-profile recommendations are precautionary, not individualized medical advice. Emergency phrases bypass Gemini. No clinical or native-speaker validation is claimed.
-
-Family profiles, reports and feedback stay on the device unless the user exports them. AI questions send selected coordinates, profile and bounded context to the backend and model provider. Background alerts store an explicitly subscribed fixed city and endpoint, expire after 30 days, and can be revoked. Physical-device notification delivery and independent participant usability remain to be confirmed.
-
-See [security and operational limits](docs/SECURITY.md), [product requirements](docs/PRD.md), [prompt engineering](docs/PROMPT-ENGINEERING.md) and [volunteer validation protocol](docs/USER-VALIDATION.md).
-
-Dashboard release hardening: current readings and offline snapshots must contain a valid timestamp and AQI. Invalid cached data falls back to clearly labelled sample data, and city changes immediately clear previous plans. The hero presents concise guidance and a separate dominant-pollutant chip; the detailed advice remains below. Production mobile browser coverage includes the landing preview and horizontal overflow.
-
-Security and reliability: shared Redis budget defaults to 300 Gemini outbound attempts per UTC day, configurable with `GEMINI_DAILY_LIMIT` (1–10000). Provider budget errors fall back to verified rule guidance. CI pattern-scans tracked text for credentials. Search ignores stale asynchronous results, corrupted recent-city storage is discarded, chart labels are escaped and assistant requests have a client timeout. Independent security/clinical review and physical notification delivery remain unverified.
-
-Landing preview uses two Open-Meteo HTTP requests at most (Delhi forecast and a multi-location current-reading batch for the other five cities). Returned grid coordinates are checked against the requested cities; partial results are labelled, with no invented values. The browser fixture reverses batch order to verify correct mapping. See the [Air Quality API documentation](https://open-meteo.com/en/docs/air-quality-api). The landing privacy copy explicitly discloses assistant data transfer and opt-in background alerts.
-
-Mobile landing uses independently contained offscreen sections with measured-size retention, simplified first-screen layout and no smooth-scroll animation on phones. Production Chromium coverage includes a simulated service-worker push event and notification inspection; this verifies browser display logic but not internet push delivery or a human receipt.
-
-Dashboard UX: on wide screens the decision rail shows the best available two-hour forecast window, forecast range and hours above US AQI 100, profile guidance and locally saved locations (up to five). No new external data calls are required. Device alert settings are available inside the bell; install promotion appears in the header only when supported by the browser. Design references: AirNow current/forecast guidance, IQAir personal dashboards, and web.dev PWA install promotion patterns.
-
-Personal Air Decision Engine: compare two exact dynamic-programming solutions for up to four ordered outdoor activities. Both minimize caution activities first; one minimizes forecast PM2.5 concentration-time proxy, then shift, the other minimizes total absolute hours shifted, then proxy. Fixed commitments remain fixed. Selected option and baseline are exported with the saved plan. No actual exposure or health outcome is claimed. Competitor context: IQAir AirVisual, AirTrack and exposure-routing research already offer personalized pollution insights; the differentiating demonstration is the constraint-aware transparent decision trade-off, not a claim of world-first functionality.
+[Product requirements](docs/PRD.md) · [Security and operational limits](docs/SECURITY.md) · [Health guidance](docs/HEALTH-GUIDANCE.md) · [Prompt engineering](docs/PROMPT-ENGINEERING.md) · [Volunteer validation protocol](docs/USER-VALIDATION.md)
