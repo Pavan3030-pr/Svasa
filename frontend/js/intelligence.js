@@ -33,7 +33,7 @@ function capture(items,plan,hours,cityKey,profile,policy){
 }
 // Storage is untrusted. Bound the shape and lifespan before restoring any draft.
 function restore(snapshot,S,cityKey,profile,now=Date.now()){
- if(!snapshot||snapshot.version!==1||snapshot.cityKey!==cityKey||snapshot.profile!==profile||!Object.hasOwn(S.PROFILES,profile)||!['exposure','routine'].includes(snapshot.policy)||!Number.isFinite(snapshot.savedAt)||snapshot.savedAt>now+60000||now-snapshot.savedAt>48*3600000||!Array.isArray(snapshot.items)||snapshot.items.length<1||snapshot.items.length>4||!valid(snapshot.exposure)||!Number.isInteger(snapshot.risk)||snapshot.risk<0||snapshot.risk>snapshot.items.length)return null;
+ if(!snapshot||snapshot.version!==1||snapshot.cityKey!==cityKey||snapshot.profile!==profile||!Object.hasOwn(S.PROFILES,profile)||!['exposure','routine','robust'].includes(snapshot.policy)||!Number.isFinite(snapshot.savedAt)||snapshot.savedAt>now+60000||now-snapshot.savedAt>48*3600000||!Array.isArray(snapshot.items)||snapshot.items.length<1||snapshot.items.length>4||!valid(snapshot.exposure)||!Number.isInteger(snapshot.risk)||snapshot.risk<0||snapshot.risk>snapshot.items.length)return null;
  const names=['Commute','Walk','Workout','School','Shopping','Other'];
  if(!snapshot.items.every(a=>a&&names.includes(a.name)&&Number.isInteger(a.duration)&&a.duration>=1&&a.duration<=4&&[0,1,2,4,6].includes(a.flex)&&iso(a.preferredTime)&&iso(a.chosenTime)&&Math.abs(Date.parse(a.preferredTime+'Z')-Date.parse(a.chosenTime+'Z'))<=a.flex*3600000))return null;
  return {cityKey,profile,policy:snapshot.policy,items:snapshot.items.map(a=>({name:a.name,duration:a.duration,flex:a.flex,preferredTime:a.preferredTime,chosenTime:a.chosenTime})),exposure:snapshot.exposure,risk:snapshot.risk};
@@ -43,7 +43,7 @@ function revise(snapshot,hours,S,cityKey,profile){
  if(!Array.isArray(hours)||!hours.length)return {state:'unavailable'};
  const items=snapshot.items.map(a=>{const preferred=hours.findIndex(h=>h.time===a.preferredTime);return {...a,preferred,earliest:Math.max(0,preferred-a.flex),latest:Math.min(hours.length,preferred+a.duration+a.flex)};});
  if(items.some(a=>a.preferred<0||a.preferred+a.duration>hours.length))return {state:'expired'};
- const proposal=S.optimizeDay(hours,items,profile,snapshot.policy);if(!proposal)return {state:'infeasible'};
+ const proposal=snapshot.policy==='robust'?robustPlan(hours,items,S,profile):S.optimizeDay(hours,items,profile,snapshot.policy);if(!proposal)return {state:'infeasible'};
  const original=items.map(a=>slot(hours,hours.findIndex(h=>h.time===a.chosenTime),a.duration,S,profile)),priorValid=original.every((x,i)=>x&&(!i||original[i-1].end<=x.start)),prior=priorValid?original.reduce((n,x)=>n+x.exposure,0):null,changed=proposal.slots.some((x,i)=>x.start!==items[i].chosenTime);
  return {state:changed?'changed':'unchanged',items,proposal,prior,priorRisk:priorValid?original.filter(x=>x.caution).length:null,changed,delta:prior===null?null:prior-proposal.exposure};
 }
@@ -73,5 +73,87 @@ function verifyText(value,ctx,S){
  if(S.effectiveLevel(ctx.aqi,ctx.profile)>=2&&/(?:^|[.!?]\s+)(?:go (?:for a )?|do |try |continue )?(?:run(?:ning)?|jog(?:ging)?|strenuous exercise|intense exercise) (?:outdoors|outside)\b/i.test(recommendation))return false;
  return true;
 }
-return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText};
+
+// Deterministic sensitivity analysis, not a calibrated forecast uncertainty interval.
+// Shift the same hourly AQI/PM pair together; where a neighboring hour is missing,
+// retain the nominal reading and disclose that boundary rule.
+const scenarioIds=['nominal','peak-earlier','peak-later','higher-pm'];
+function scenarioRows(hours,S){
+ const h=hours.slice(0,24);
+ const usable=x=>x&&iso(x.time)&&valid(x.aqi)&&S.band(x.aqi)&&valid(x.pm2_5);
+ const adjacent=(x,y,d)=>usable(x)&&usable(y)&&(d===1?next(x.time)===y.time:next(y.time)===x.time);
+ return [h,h.map((x,i)=>adjacent(x,h[i+1],1)?{...x,aqi:h[i+1].aqi,pm2_5:h[i+1].pm2_5}:x),h.map((x,i)=>adjacent(x,h[i-1],-1)?{...x,aqi:h[i-1].aqi,pm2_5:h[i-1].pm2_5}:x),h.map(x=>usable(x)?{...x,pm2_5:x.pm2_5*1.25}:x)];
+}
+function objectives(t,policy){
+ return policy==='robust'?[t.worstRisk,t.worstExposure,t.shift,t.scenarios[0].exposure]:policy==='routine'?[t.scenarios[0].risk,t.shift,t.scenarios[0].exposure]:[t.scenarios[0].risk,t.scenarios[0].exposure,t.shift];
+}
+const lex=(a,b)=>!b||a.some((v,i)=>v<b[i]&&a.slice(0,i).every((n,j)=>n===b[j]));
+function analyze(hours,items,S,profile){
+ if(!Array.isArray(hours)||!Array.isArray(items)||!items.length||items.length>4||!Object.hasOwn(S.PROFILES,profile))return null;
+ const h=hours.slice(0,24),n=h.length,scenarios=scenarioRows(h,S);
+ if(!items.every(a=>a&&Number.isInteger(a.duration)&&a.duration>=1&&a.duration<=4&&Number.isInteger(a.preferred)&&Number.isInteger(a.earliest)&&Number.isInteger(a.latest)&&a.earliest>=0&&a.latest<=n&&a.earliest<=a.preferred&&a.preferred+a.duration<=a.latest))return null;
+ const options=items.map(a=>Array.from({length:Math.max(0,a.latest-a.earliest-a.duration+1)},(_,k)=>{
+  const index=a.earliest+k,slots=scenarios.map(rows=>slot(rows,index,a.duration,S,profile));
+  return slots.every(Boolean)?{index,endIndex:index+a.duration,slots,shift:Math.abs(index-a.preferred)}:null;
+ }).filter(Boolean));
+ const best={exposure:null,routine:null,robust:null},scores={},chosen=[];let count=0;
+ function walk(k,end){
+  if(k===items.length){
+   count++;
+   const totals=scenarioIds.map((id,j)=>({id,risk:chosen.reduce((n,o)=>n+Number(o.slots[j].caution),0),exposure:chosen.reduce((n,o)=>n+o.slots[j].exposure,0)}));
+   const t={indices:chosen.map(o=>o.index),scenarios:totals,shift:chosen.reduce((n,o)=>n+o.shift,0),worstRisk:Math.max(...totals.map(x=>x.risk)),worstExposure:Math.max(...totals.map(x=>x.exposure))};
+   for(const p of Object.keys(best)){const score=objectives(t,p);if(lex(score,scores[p])){scores[p]=score;best[p]=t;}}
+   return;
+  }
+  for(const o of options[k])if(o.index>=end){chosen.push(o);walk(k+1,o.endIndex);chosen.pop();}
+ }
+ walk(0,0);
+ return {count,best,options:options.map(a=>a.length)};
+}
+function evaluateSchedule(hours,items,indices,S,profile){
+ if(!Array.isArray(indices)||indices.length!==items.length)return null;
+ const scenarios=scenarioRows(hours,S);
+ if(!indices.every((index,i)=>Number.isInteger(index)&&index>=items[i].earliest&&index+items[i].duration<=items[i].latest&&(!i||indices[i-1]+items[i-1].duration<=index)))return null;
+ const totals=scenarios.map((h,j)=>{const s=items.map((a,i)=>slot(h,indices[i],a.duration,S,profile));return s.every(Boolean)?{id:scenarioIds[j],risk:s.filter(x=>x.caution).length,exposure:s.reduce((n,x)=>n+x.exposure,0)}:null;});
+ if(totals.some(x=>!x))return null;
+ return {indices:[...indices],scenarios:totals,shift:indices.reduce((n,x,i)=>n+Math.abs(x-items[i].preferred),0),worstRisk:Math.max(...totals.map(x=>x.risk)),worstExposure:Math.max(...totals.map(x=>x.exposure))};
+}
+function robustPlan(hours,items,S,profile,analysis){
+ const t=(analysis||analyze(hours,items,S,profile))?.best.robust;if(!t)return null;
+ const base=S.optimizeDay(hours,items,profile,'exposure');if(!base)return null;
+ const slots=items.map((a,i)=>({...slot(hours,t.indices[i],a.duration,S,profile),endIndex:t.indices[i]+a.duration,shift:Math.abs(t.indices[i]-a.preferred)}));
+ return {...base,policy:'robust',slots,risk:t.scenarios[0].risk,exposure:t.scenarios[0].exposure,shift:t.shift,changePct:base.baseline>0?Math.round((base.baseline-t.scenarios[0].exposure)/base.baseline*100):null};
+}
+function certificate(hours,items,plan,S,profile,analysis){
+ if(!plan||!['exposure','routine','robust'].includes(plan.policy))return null;
+ const a=analysis||analyze(hours,items,S,profile),t=evaluateSchedule(hours,items,plan.slots.map(x=>x.index),S,profile);if(!a?.count||!t)return null;
+ const score=objectives(t,plan.policy),optimal=objectives(a.best[plan.policy],plan.policy);
+ if(!score.every((v,i)=>Math.abs(v-optimal[i])<=1e-8*Math.max(1,Math.abs(optimal[i]))))return null;
+ return {version:1,method:'Exhaustive ordered non-overlapping hourly schedules; deterministic sensitivity scenarios, not probabilities',profile,policy:plan.policy,hours:hours.slice(0,24).map(x=>x?{time:x.time,aqi:x.aqi,pm2_5:x.pm2_5}:null),items:items.map(({name,duration,preferred,earliest,latest})=>({name,duration,preferred,earliest,latest})),selected:t,feasibleSchedules:a.count,objective:score};
+}
+function verifyCertificate(c,S){
+ try{
+  if(!c||c.version!==1||!['exposure','routine','robust'].includes(c.policy)||!Array.isArray(c.hours)||c.hours.length>24||!Array.isArray(c.items)||c.items.length>4)return false;
+  const a=analyze(c.hours,c.items,S,c.profile);if(!a?.count||a.count!==c.feasibleSchedules)return false;
+  const t=evaluateSchedule(c.hours,c.items,c.selected.indices,S,c.profile);if(!t)return false;
+  const score=objectives(t,c.policy),optimal=objectives(a.best[c.policy],c.policy);
+  return JSON.stringify(t)===JSON.stringify(c.selected)&&JSON.stringify(score)===JSON.stringify(c.objective)&&score.every((v,i)=>Math.abs(v-optimal[i])<=1e-8*Math.max(1,Math.abs(optimal[i])));
+ }catch(_){return false;}
+}
+function conflict(hours,items,S,profile){
+ const a=analyze(hours,items,S,profile);if(!a||a.count)return null;
+ const n=Math.min(hours.length,24),suggestions=[];
+ // Search one activity's flexibility at a time. A fixed commitment is never changed automatically.
+ for(let i=0;i<items.length;i++){
+  const x=items[i],old=Number.isInteger(x.flex)?x.flex:Math.max(x.preferred-x.earliest,x.latest-x.preferred-x.duration);
+  for(const flex of [1,2,4,6].filter(v=>v>old)){
+   const revised=items.map((v,j)=>j===i?{...v,earliest:Math.max(0,v.preferred-flex),latest:Math.min(n,v.preferred+v.duration+flex)}:v);
+   if(S.optimizeDay(hours,revised,profile,'exposure')){suggestions.push({index:i,name:x.name,flex,added:Math.max(0,x.preferred-revised[i].earliest-old,revised[i].latest-x.preferred-x.duration-old),fixed:x.flex===0});break;}
+  }
+ }
+ suggestions.sort((x,y)=>x.added-y.added||Number(x.fixed)-Number(y.fixed)||x.index-y.index);
+ return {missing:items.filter((_,i)=>!a.options[i]).map(x=>x.name),suggestion:suggestions[0]||null};
+}
+
+return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText,analyze,evaluateSchedule,robustPlan,certificate,verifyCertificate,conflict};
 });
