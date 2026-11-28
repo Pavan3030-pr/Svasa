@@ -41,3 +41,7 @@ New decision labs add an analytic room mass-balance model, user-factor transport
 ## First-use usability review
 
 Production Chromium run 46097129541 passed all 21 journeys on 5dd5b0a. Reviewed actual rendered screenshots from the fixture browser artifact 15244056175: numeric fields had browser-default compact targets and new decision labs were buried below the long planner. Added direct workspace navigation, accessible numeric fields, explanatory room-input hints and an explicitly illustrative travel example. New browser checks exercise shortcuts and example calculations. This is developer/automated usability review, not an independent participant study. Live free-text Gemini fell back to rules; simulated push display is not physical-device receipt.
+
+## Factual answers and first-use improvements
+
+Exact current AQI/PM2.5 questions in five languages now return verified server data without a model call, with explicit missing-data behavior. Unknown or compound questions still use the original AI/fallback contract. Reports render on entry rather than during dashboard startup; family deletion now checks local persistence before changing the UI. Added a voluntary first-use task guide and tests. The previous local Lighthouse audit 46099645392 had an individual mobile landing sample of 84 with 622.5 ms total blocking time; production audit passed. No performance thresholds changed. New evidence is required to establish improvement. Independent participant and clinical validation remain outstanding.

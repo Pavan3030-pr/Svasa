@@ -19,8 +19,10 @@ module.exports = async function ask(req) {
   try {
     let ctx;
     try { ctx=await air.verifiedContext(b.place,b.ctx&&b.ctx.profile,b.ctx&&b.ctx.lang,b.ctx&&b.ctx.hist); } catch (_) { return R(503,{error:'Verified air data unavailable'}); }
-    if(b.mode==='verified'){
-      const value=require('../lib/verified-intents').answer(q,ctx);
+    const intents=require('../lib/verified-intents');
+    const factual=intents.factualAnswer(q,ctx);
+    if(b.mode==='verified'||factual){
+      const value=factual||intents.answer(q,ctx);
       if(!value)return R(400,{error:'Choose a supported verified question'});
       return R(200,{sections:value,answer:[value.recommendation,value.reason,value.limitation].join('\n'),source:'verified',evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window}});
     }

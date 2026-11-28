@@ -6,7 +6,7 @@ const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
 const WX = 'https://api.open-meteo.com/v1/forecast';
 const VIEWS = ['today', 'hourly', 'plan', 'cities', 'breathe', 'ask', 'family', 'reports'];
 const st = { profile: 'general', place: null, data: null, wx: null, demo: false, stale: null, ctx: null, lang: 'en', hist: [], serverAI: false };
-let capabilities=null;
+let capabilities=null,reportController=null;
 let busy = false, cmp = [], lastLvl = null, lastAlertProfile=null, alertsOn = false, deferredInstall = null, suggTimer, inbox=null;
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -357,6 +357,7 @@ function show(v) {
   if(v==='hourly'&&st.data){drawChart(st.hrs||[],st.ctx?.window);loadHistory();}
   if(v==='cities')drawCities();
   if(v==='family')renderFamily();
+  if(v==='reports')reportController?.render();
   if(v==='ask')refreshAIMode();
   if(v==='plan'){if(!currentPlan)renderActivityTimes();renderReview();}
   window.scrollTo(0, 0);
@@ -568,13 +569,13 @@ function renderFamily(){
 }
 $('familyprofile').innerHTML=Object.entries(S.PROFILES).map(([k,v])=>'<option value="'+k+'">'+esc(v.name)+'</option>').join('');
 $('familyform').onsubmit=e=>{e.preventDefault();const name=$('familyname').value.trim(),profile=$('familyprofile').value;if(!name||family.length>=6||!Object.hasOwn(S.PROFILES,profile)){banner('Add a nickname; up to six profiles are supported.');return;}const next=[...family,{name,profile}];if(!store.set('svasa_family',next)){banner('Could not save family profile on this device.');return;}family=next;$('familyname').value='';renderFamily();inbox?.emit('Family profile added','Your family guidance is ready on this device.','family');};
-$('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){family.splice(Number(b.dataset.familyRemove),1);store.set('svasa_family',family);renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;changeProfile(x.profile);show('today');}};
-$('clearfamily').onclick=()=>{family=[];store.set('svasa_family',family);renderFamily();};
+$('familyresults').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.familyRemove!==undefined){const next=family.filter((_,i)=>i!==Number(b.dataset.familyRemove));if(!store.set('svasa_family',next)){banner('Could not remove family profile from this device.');return;}family=next;renderFamily();}else if(b.dataset.familyUse!==undefined){const x=family[Number(b.dataset.familyUse)];if(!x)return;changeProfile(x.profile);show('today');}};
+$('clearfamily').onclick=()=>{if(!store.set('svasa_family',[])){banner('Could not clear family profiles from this device.');return;}family=[];renderFamily();};
 // Populate non-visible feature views only when opened.
 
 inbox=window.SvasaInbox.init({$,store,show});
 alertsOn=!!store.get('svasa_device_alerts',false)&&'Notification'in window&&Notification.permission==='granted';if(alertsOn)$('notif').textContent='Disable device alerts while open';
-window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,onSaved:()=>{persistReview();renderReview();},onClear:forgetReview,show,banner,notify:(...args)=>inbox.emit(...args)});
+reportController=window.SvasaReports.init({$,store,esc,forecast,getPlan:()=>currentPlan,invalidatePlan,onSaved:()=>{persistReview();renderReview();},onClear:forgetReview,show,banner,notify:(...args)=>inbox.emit(...args)});
 window.SvasaPushUI.init({$,store,st});
 
 /* ---------- boot ---------- */

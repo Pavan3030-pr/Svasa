@@ -29,3 +29,5 @@ Ask each consenting participant to clear previous feedback on their own device, 
 Ask each participant to select a quick question and then type a different air-quality question. Have them identify which response used fixed rules and which used Gemini or fallback. Ask whether the limitation and observation time were understood. Record the actual outcome, not an inferred completion. Share only anonymous outcomes with the organizer. No recruitment or independent participant response has been completed by automated tests.
 
 Optional expanded tasks: change the purifier CADR and explain why the indoor result is a scenario rather than a measurement; compare two travel choices using supplied test factors and explain the trade-off; find the robust family window and identify its worst-scenario caveat. Record actual comprehension and completion only.
+
+The Reports view now contains a voluntary first-use task guide. Participants can follow the same checklist before submitting feedback; only actual, voluntarily shared responses are counted.
