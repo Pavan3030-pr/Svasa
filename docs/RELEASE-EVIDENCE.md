@@ -45,3 +45,7 @@ Production Chromium run 46097129541 passed all 21 journeys on 5dd5b0a. Reviewed 
 ## Factual answers and first-use improvements
 
 Exact current AQI/PM2.5 questions in five languages now return verified server data without a model call, with explicit missing-data behavior. Unknown or compound questions still use the original AI/fallback contract. Reports render on entry rather than during dashboard startup; family deletion now checks local persistence before changing the UI. Added a voluntary first-use task guide and tests. The previous local Lighthouse audit 46099645392 had an individual mobile landing sample of 84 with 622.5 ms total blocking time; production audit passed. No performance thresholds changed. New evidence is required to establish improvement. Independent participant and clinical validation remain outstanding.
+
+## Provider integrity and bounded capacity expansion
+
+Added model-response coordinate, UTC offset, timestamp, particle-unit and forecast-sequence checks plus station ID/unit validation and stale candidate recovery. Expanded the real read-only production probe to 60 requests (six concurrent), with a 5-second p95 ceiling. These are implementation and test changes; wait for the corresponding release evidence before claiming success. No independent clinical, penetration or user-study result is inferred.

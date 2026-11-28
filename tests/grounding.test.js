@@ -16,5 +16,13 @@ const assert=require('node:assert/strict'),S=require('../frontend/js/core'),air=
   assert.equal(S.readingAge({current:{time:'2026-11-27T11:00'}},now),null);
   assert.equal(S.cleanQuestion('a'.repeat(600)).length,500);
   assert.equal(S.validateCtx({aqi:100,profile:'constructor',dominant:'__proto__',lang:'constructor'}).dominant,null);
+  const p={lat:17.4,lon:78.5},fresh={latitude:17.5,longitude:78.4,utc_offset_seconds:0,current:{time:'2026-11-27T05:30',us_aqi:100,pm2_5:25},current_units:{pm2_5:'μg/m³'},hourly:{time:['2026-11-27T06:00','2026-11-27T07:00'],us_aqi:[50,2000],pm2_5:[10,-1]}};
+  assert.equal(air.validateReading(fresh,p,now).pm25,25);assert.deepEqual(air.validateReading(fresh,p,now).rows.map(x=>x.aqi),[50,null]);
+  assert.throws(()=>air.validateReading({...fresh,latitude:40},p,now),/location/);
+  assert.throws(()=>air.validateReading({...fresh,utc_offset_seconds:19800},p,now),/timezone/);
+  assert.throws(()=>air.validateReading({...fresh,current:{...fresh.current,time:'2026-02-30T05:30'}},p,Date.parse('2026-03-02T05:30Z')),/Fresh air/);
+  assert.equal(air.validateReading({...fresh,current_units:{pm2_5:'mg/m³'}},p,now).pm25,null);
+  assert.equal(air.validateReading({...fresh,hourly:{...fresh.hourly,time:['2026-11-27T06:00','2026-11-27T06:00']}},p,now).rows.length,0);
+  assert.ok(air.validateReading({...fresh,latitude:0,longitude:-179.8},{lat:0,lon:179.9},now));
   console.log('Grounding and freshness tests passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

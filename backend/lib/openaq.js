@@ -8,7 +8,7 @@ const rad = d => d * Math.PI / 180;
 function km(a, b, c, d) {
   const R = 6371, dl = rad(c - a), dn = rad(d - b);
   const x = Math.sin(dl / 2) ** 2 + Math.cos(rad(a)) * Math.cos(rad(c)) * Math.sin(dn / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(x));
+  return 2 * R * Math.asin(Math.sqrt(Math.max(0,Math.min(1,x))));
 }
 async function oq(path,deadline) {
   const remaining=deadline-Date.now();
@@ -25,7 +25,7 @@ async function findLocations(lat, lon, deadline) {
   for (const c of [lat + ',' + lon, lon + ',' + lat]) {
     const j = await oq('/locations?coordinates=' + c + '&radius=25000&limit=20',deadline);
     const ok = (j.results || [])
-      .filter(l => l && l.coordinates && typeof l.coordinates.latitude === 'number' && typeof l.coordinates.longitude === 'number')
+      .filter(l => l && Number.isSafeInteger(l.id)&&l.id>0&&l.coordinates&&Number.isFinite(l.coordinates.latitude)&&Number.isFinite(l.coordinates.longitude)&&Math.abs(l.coordinates.latitude)<=90&&Math.abs(l.coordinates.longitude)<=180)
       .map(l => ({ l, d: km(lat, lon, l.coordinates.latitude, l.coordinates.longitude) }))
       .filter(x => x.d <= 25);
     if (ok.length) return ok.sort((a, b) => a.d - b.d);
@@ -42,8 +42,8 @@ async function lookup(lat,lon,key){
   for (const { l, d } of (await findLocations(lat, lon,deadline)).slice(0, 5)) {
     if(Date.now()>=deadline){if(out)break;throw Object.assign(Error('Station deadline exceeded'),{code:'UPSTREAM_TIMEOUT'});}
     let sensors = l.sensors;
-    if (!Array.isArray(sensors) || !sensors.length) { try { sensors = (await oq('/locations/' + l.id + '/sensors',deadline)).results || []; } catch (e) { if(e.code||!e.status||e.status>=500)throw e;sensors = []; } }
-    const map = Object.create(null); for (const s of sensors) {const unit=String(s?.parameter?.units||'').replace(/μ/g,'µ').replace(/\s/g,'').toLowerCase();if(!unit||['µg/m³','µg/m3','ug/m3','ug/m³'].includes(unit))map[s.id] = pname(s);}
+    if (!Array.isArray(sensors) || !sensors.length) { try { sensors = (await oq('/locations/' + l.id + '/sensors',deadline)).results || []; } catch (e) { if(e.code||!e.status||e.status>=500){if(out)break;throw e;}sensors = []; } }
+    const map = Object.create(null); for (const s of sensors) {const unit=String(s?.parameter?.units||'').replace(/μ/g,'µ').replace(/\s/g,'').toLowerCase();if(Number.isSafeInteger(s?.id)&&s.id>0&&['µg/m³','µg/m3','ug/m3','ug/m³'].includes(unit))map[s.id] = pname(s);}
     if (!Object.values(map).includes('pm25')) continue;
     const vals = {}, times = {}; 
     let latest;try{latest=(await oq('/locations/' + l.id + '/latest',deadline)).results||[];}catch(e){if(out)break;throw e;}
@@ -56,7 +56,7 @@ async function lookup(lat,lon,key){
       }
     }
     if (typeof vals.pm25 === 'number') {
-      const time=times.pm25; const age = time && isFinite(Date.parse(time)) ? Math.max(0, Math.round((Date.now() - Date.parse(time)) / 360000) / 10) : null;
+      const time=times.pm25; const age = time && isFinite(Date.parse(time)) ? Math.max(0, (Date.now() - Date.parse(time)) / 3600000) : null;
       const candidate = { id: l.id, name: String(l.name || 'Monitoring station').slice(0, 80), distanceKm: Math.round(d * 10) / 10, pm25: vals.pm25, pm10: typeof vals.pm10 === 'number' ? vals.pm10 : null, pm10Time:times.pm10||null, time, ageHours: age };
       if(!out||Date.parse(candidate.time)>Date.parse(out.time))out=candidate;
       if(Date.now()-Date.parse(candidate.time)<=3*3600000){out=candidate;break;}
