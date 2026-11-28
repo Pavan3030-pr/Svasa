@@ -15,10 +15,9 @@ async function verifiedContext(place,profile,lang,hist){
   const key=p.lat+','+p.lon,hit=cache.get(key);
   let d=hit&&Date.now()-hit.at<180000?hit.d:null;
   if(!d)d=await fetchReading(p,key);
-  const c=d&&d.current,t=c&&typeof c.time==='string'?Date.parse(c.time+'Z'):NaN;
+  const c=d&&d.current,t=c&&typeof c.time==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(c.time)?Date.parse(c.time+'Z'):NaN;
   if(!c||!S.band(c.us_aqi)||c.us_aqi>1000||!Number.isFinite(t)||Date.now()-t>3*3600000||t-Date.now()>3600000)throw new Error('Fresh air data unavailable');
-  if(cache.size>=250)cache.clear();
-  if(!hit||d!==hit.d)cache.set(key,{at:Date.now(),d});
+  if(!hit||d!==hit.d){if(cache.size>=250&&!cache.has(key))cache.delete(cache.keys().next().value);cache.set(key,{at:Date.now(),d});}
   const h=S.hourlyFrom(d,c.time),w=S.bestWindow(h,2);
   return {...S.validateCtx({aqi:c.us_aqi,city:p.lat.toFixed(4)+', '+p.lon.toFixed(4),profile,lang,hist,dominant:S.dominant(c),trend:S.trend(h),window:w}),observedAt:c.time+'Z',source:'Open-Meteo / CAMS model',timezone:'UTC',pm25:Number.isFinite(c.pm2_5)&&c.pm2_5>=0?c.pm2_5:null};
 }

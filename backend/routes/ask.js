@@ -9,7 +9,7 @@ module.exports = async function ask(req) {
   if (!g.isJson(req.headers)) return R(415, { error: 'JSON required' });
   const b = req.body;
   if (g.tooBig(b)) return R(413, { error: 'Request too large' });
-  if (!b || typeof b !== 'object') return R(400, { error: 'Invalid JSON' });
+  if (!b || typeof b !== 'object' || Array.isArray(b) || typeof b.q!=='string' || (b.ctx!=null&&(typeof b.ctx!=='object'||Array.isArray(b.ctx)))) return R(400, { error: 'Invalid JSON' });
   const q = S.cleanQuestion(b.q);
   const sf = S.safety(typeof b.q==='string'?b.q:'', b.ctx && b.ctx.lang); if (sf) return R(200, { answer: sf, source: 'safety' });
   try {if(await g.rateLimit('ask:'+req.ip))return R(429,{error:'Too many requests. Try again in a minute.'});}catch(_){return R(503,{error:'Rate limit service unavailable'});}
