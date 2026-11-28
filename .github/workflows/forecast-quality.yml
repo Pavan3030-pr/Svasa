@@ -1,5 +1,8 @@
 name: SVASA forecast quality observation
 on:
+  push:
+    branches: [main]
+    paths: ['scripts/forecast-quality.js', '.github/workflows/forecast-quality.yml']
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
