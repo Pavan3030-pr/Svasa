@@ -66,6 +66,9 @@ Actual application UI captured by automated Chromium on commit df3a8f4. **Contro
 | **Forecast Resilience** | Compare four deterministic stress scenarios and choose a minimax schedule without moving fixed commitments. |
 | **Constraint Resolution** | Explain infeasibility and propose the smallest supported single-activity flexibility change, with explicit consent. |
 | **Decision Certificate** | Export forecast inputs, constraints, scenario totals and objective; recompute the optimum locally to check the result. |
+| **Indoor Air Intelligence** | Six-hour single-zone PM2.5 mass balance with optional filtration and an outdoor stress scenario, using editable assumptions. |
+| **Sustainable Decision Engine** | Compare two travel options by user-supplied emissions factors, time and ambient concentration-time proxy; identify Pareto dominance. |
+| **Family Fairness** | Choose a shared two-hour window minimizing the worst profile caution level across four illustrative scenarios. |
 
 The planner uses dynamic programming for nominal pollution and routine priorities, and bounded exhaustive enumeration for forecast resilience. The robust priority minimizes worst tested caution count, worst tested concentration-time proxy, total shift and nominal proxy, in that order. The four stress scenarios are illustrative, not calibrated uncertainty bounds. Fixed commitments stay fixed unless the user explicitly chooses to relax a conflict. It supports up to four ordered outdoor activities. Neither the proxy nor completion is measured exposure, an inhaled dose or a health outcome.
 

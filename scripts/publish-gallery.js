@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const sha=process.argv[2],run=process.argv[3],source=process.argv[4]||'gallery-artifacts';
 assert.match(sha||'',/^[a-f0-9]{40}$/);assert.match(run||'',/^\d+$/);
-const files=['landing-desktop','dashboard-desktop','planner-desktop','parallel-futures','forecast-resilience','decision-certificate','constraint-resolution','adaptive-day','airtrust','family-protection','impact-ledger','forecast-desktop','assistant-desktop','cities-desktop','breathe-desktop','landing-mobile','dashboard-mobile','planner-mobile'];
+const files=['landing-desktop','dashboard-desktop','planner-desktop','parallel-futures','forecast-resilience','decision-certificate','constraint-resolution','adaptive-day','airtrust','family-protection','family-fairness','indoor-intelligence','sustainable-travel','impact-ledger','forecast-desktop','assistant-desktop','cities-desktop','breathe-desktop','landing-mobile','dashboard-mobile','planner-mobile'];
 const target='docs/screenshots/current';fs.mkdirSync(target,{recursive:true});
 for(const name of files){
  const bytes=fs.readFileSync(path.join(source,name+'.png'));
@@ -22,7 +22,7 @@ const lines=[
  '### Forecast resilience and decision proof',image('Four deterministic forecast stress scenarios','forecast-resilience'),'',
  '| Decision certificate | Constraint resolution |','|:---:|:---:|','| '+image('Recomputed optimality certificate','decision-certificate')+' | '+image('Explicit conflict resolution','constraint-resolution')+' |','',
  '| Adaptive Day | AirTrust |','|:---:|:---:|','| '+image('Adaptive day forecast review','adaptive-day')+' | '+image('AirTrust evidence quality','airtrust')+' |','',
- '### Family Protection',image('Shared forecast window and family profiles','family-protection'),'',
+ '### Family Protection',image('Shared forecast window and family profiles','family-protection'),image('Robust family fairness','family-fairness'),'','### Indoor air and sustainable travel',image('Indoor PM2.5 scenario comparison','indoor-intelligence'),image('Sustainable travel trade-offs','sustainable-travel'),' ',
  '### Impact Ledger',image('Saved plans and self-reported completion','impact-ledger'),'',
  '| Forecast | AI assistant |','|:---:|:---:|','| '+image('Hourly and historical forecast','forecast-desktop')+' | '+image('Multilingual assistant with safety bypass','assistant-desktop')+' |','',
  '| City comparison | Guided breathing |','|:---:|:---:|','| '+image('City comparison view','cities-desktop')+' | '+image('Guided breathing view','breathe-desktop')+' |','',
