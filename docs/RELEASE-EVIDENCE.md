@@ -29,3 +29,7 @@ Added per-instance upstream admission controls with request coalescing, no unbou
 ## Quick-answer reliability
 
 Added explicit verified mode for six allowlisted questions in all five languages, with fresh server-side context and no model call. Typed questions retain live AI verification. The prior local Lighthouse run 46029459933 failed because one mobile landing sample scored 83 (692 ms total blocking time); the other two scored 100. The trace attributes most long-task duration to unattributable browser work. No quality gate was lowered. Recheck on the new release before claiming a pass.
+
+## Landing performance consistency
+
+Local audit 46030140328 scored 84/100 on one mobile landing sample, with total blocking time 614.5 ms and benchmark index 2113 (other mobile landing traces: 100/100, 0 ms blocking, benchmark indices 2518.5 and 2525.5). Long tasks include browser-unattributed work, document rendering and landing script work; runner contention is plausible, not proven. Landing preview network and visual commits are separated by idle scheduling, and the below-fold ticker is no longer mutated by the hero update. Removed eager upstream preconnect. All existing live values, viewport activation, error states and quality thresholds are preserved. New audits must pass before claiming consistency.
