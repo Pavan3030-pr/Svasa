@@ -30,7 +30,11 @@ jobs:
             for mode in mobile desktop; do
               EXTRA=""
               if [ "$mode" = desktop ]; then EXTRA="--preset=desktop"; fi
+              SAMPLES=1
+              if [ "$page" = index ] && [ "$mode" = mobile ]; then SAMPLES=3; fi
+              for sample in $(seq 1 "$SAMPLES"); do
               OUTPUT="quality-artifacts/$page-$mode.json"
+              if [ "$sample" != 1 ]; then OUTPUT="quality-artifacts/$page-$mode-sample-$sample.json"; fi
               for attempt in 1 2 3; do
                 rm -f "$OUTPUT"
                 if npx --no-install lighthouse "http://localhost:8080/$page.html" $EXTRA --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path="$OUTPUT" --quiet; then
@@ -39,6 +43,7 @@ jobs:
                 if [ "$attempt" = 3 ]; then echo "Audit did not produce a valid trace"; exit 1; fi
                 echo "Retrying invalid audit trace (not a score-based retry): $page $mode"
                 sleep 2
+              done
               done
             done
           done

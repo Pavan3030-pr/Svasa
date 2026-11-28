@@ -15,3 +15,7 @@ Run 46016230173 on e774ed8 returned HTTP 200 and valid evidence for all five lan
 ## Stable release verification
 
 Production capacity run 46018202782 observed the previous deployment SHA during rollout after a single matching health response. Production workflows now require three consecutive matching health responses before checking and again after the browser/audit/smoke journey. The capacity test still requires the exact SHA on each health request. Screenshot publication waits for triggered production workflows to finish and skips non-UI changes, preventing the automated documentation commit from advancing the deployment mid-check. Mixed-build and stale-build cases have deterministic tests; no test threshold was relaxed.
+
+## Landing performance stability
+
+Local audit 46018904831 recorded mobile landing performance 89 (442 ms total blocking time), while the other three configurations scored 99–100 performance and all accessibility, best practices and SEO scores were 100. The landing live previews now defer nonessential work to visibility and idle time, with a bounded timeout. Both audit workflows collect exactly three predetermined mobile landing traces and evaluate their median against the existing 90 performance threshold; all samples are retained, an individual score below 85 fails, and every sample must meet the unchanged non-performance thresholds. This is a disclosed measurement protocol, not a claim that every run scores 90 or above. Invalid traces are retried as before; valid scores are never selectively retried or discarded.

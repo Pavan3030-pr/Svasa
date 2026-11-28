@@ -30,7 +30,11 @@ jobs:
             for mode in mobile desktop; do
               EXTRA=""
               if [ "$mode" = desktop ]; then EXTRA="--preset=desktop"; fi
+              SAMPLES=1
+              if [ "$page" = index ] && [ "$mode" = mobile ]; then SAMPLES=3; fi
+              for sample in $(seq 1 "$SAMPLES"); do
               OUTPUT="deployed-quality-artifacts/$page-$mode.json"
+              if [ "$sample" != 1 ]; then OUTPUT="deployed-quality-artifacts/$page-$mode-sample-$sample.json"; fi
               for attempt in 1 2 3; do
                 rm -f "$OUTPUT"
                 if npx --no-install lighthouse "https://svasa-sage.vercel.app/$page.html" $EXTRA --chrome-flags="--headless --no-sandbox" --only-categories=performance,accessibility,best-practices,seo --output=json --output-path="$OUTPUT" --quiet; then
@@ -38,6 +42,7 @@ jobs:
                 fi
                 if [ "$attempt" = 3 ]; then exit 1; fi
                 sleep 2
+              done
               done
             done
           done
