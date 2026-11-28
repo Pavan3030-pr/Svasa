@@ -4,7 +4,7 @@
 
 SVASA turns air-quality forecasts into practical, constraint-aware outdoor decisions. Compare alternative routines, keep fixed commitments, review changing forecasts, protect family members and record completed plans. Built as an installable, responsive web application with a premium light interface.
 
-[**Live application**](https://svasa-sage.vercel.app/) · [Automated verification](https://github.com/Pavan3030-pr/Svasa/actions) · [90-second judge demo](docs/DEMO.md) · [Release evidence](docs/RELEASE-EVIDENCE.md)
+[**Live application**](https://svasa-sage.vercel.app/) · [Automated verification](https://github.com/Pavan3030-pr/Svasa/actions) · [90-second judge demo](docs/DEMO.md) · [Release evidence](docs/RELEASE-EVIDENCE.md) · [Operations](docs/OPERATIONS.md)
 
 ## Application gallery
 

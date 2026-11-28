@@ -12,3 +12,5 @@ module.exports = async function stations(req) {
   try { return R(200, { station: await openaq.nearest(lat, lon) }); }
   catch (e) { if(['UPSTREAM_BUSY','UPSTREAM_TIMEOUT','UPSTREAM_COOLDOWN'].includes(e.code)||e.name==='TimeoutError')return R(503,{error:'Station service temporarily unavailable'});return R(502, { error: 'Station lookup failed' }); }
 };
+
+module.exports=require('../lib/operational-log').observe('stations',module.exports);

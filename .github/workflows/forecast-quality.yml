@@ -1,0 +1,35 @@
+name: SVASA forecast quality observation
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: svasa-forecast-quality
+  cancel-in-progress: false
+jobs:
+  observe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - name: Retrieve previous successful forecast snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p prior
+          ID=$(gh run list --workflow forecast-quality.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$ID" ]; then gh run download "$ID" -n forecast-quality -D prior; fi
+      - name: Capture and evaluate public city forecasts
+        run: node scripts/forecast-quality.js prior/snapshot.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forecast-quality
+          path: forecast-quality-artifacts/
+          retention-days: 30

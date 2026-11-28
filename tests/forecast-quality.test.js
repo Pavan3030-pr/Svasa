@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict'),{cities,extract,snapshot,compare}=require('../scripts/forecast-quality');
+const now=Date.UTC(2026,10,27,12),hour=i=>new Date(now+i*3600000).toISOString().slice(0,16);
+const raw=cities.map(c=>({latitude:c.lat,longitude:c.lon,utc_offset_seconds:0,current:{time:hour(0)},hourly:{time:[0,6,12,24].map(hour),pm2_5:[10,20,30,40],us_aqi:[50,60,70,80]}}));
+const data=extract(raw,now),snap=snapshot(data,now);assert.equal(snap.forecasts.length,9);
+const revised=raw.map(r=>({...r,current:{time:hour(24)},hourly:{...r.hourly,pm2_5:[10,22,25,50],us_aqi:[50,65,60,90]}}));
+const report=compare(snap,extract(revised,now+24*3600000),now+24*3600000);assert.equal(report.matched,9);assert.deepEqual(report.groups.map(g=>g.pm25MAE),[2,5,10]);assert.deepEqual(report.groups.map(g=>g.aqiMAE),[5,10,10]);
+assert.equal(compare(snap,data,now).matched,0);assert.equal(compare(null,data,now).matched,0);
+assert.equal(snapshot(extract(raw.map(r=>({...r,utc_offset_seconds:3600})),now),now).forecasts.length,0);
+const bad={...snap,forecasts:[{...snap.forecasts[0],target:hour(7)}]};assert.equal(compare(bad,data,now).skipped.invalid,1);
+console.log('Forecast evaluation: UTC matching, no future comparisons, exact MAE and missing-data behavior passed');
