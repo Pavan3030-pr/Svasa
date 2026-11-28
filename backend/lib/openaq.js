@@ -57,7 +57,7 @@ async function lookup(lat,lon,key){
     }
     if (typeof vals.pm25 === 'number') {
       const time=times.pm25; const age = time && isFinite(Date.parse(time)) ? Math.max(0, (Date.now() - Date.parse(time)) / 3600000) : null;
-      const candidate = { id: l.id, name: String(l.name || 'Monitoring station').slice(0, 80), distanceKm: Math.round(d * 10) / 10, pm25: vals.pm25, pm10: typeof vals.pm10 === 'number' ? vals.pm10 : null, pm10Time:times.pm10||null, time, ageHours: age };
+      const candidate = { id: l.id, name: String(l.name || 'Monitoring station').slice(0, 80), distanceKm: Math.round(d * 10) / 10, latitude:l.coordinates.latitude, longitude:l.coordinates.longitude, pm25: vals.pm25, pm10: typeof vals.pm10 === 'number' ? vals.pm10 : null, pm10Time:times.pm10||null, time, ageHours: age };
       if(!out||Date.parse(candidate.time)>Date.parse(out.time))out=candidate;
       if(Date.now()-Date.parse(candidate.time)<=3*3600000){out=candidate;break;}
     }

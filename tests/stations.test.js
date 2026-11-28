@@ -16,7 +16,7 @@ mock.listen(0,async()=>{
   process.env.OPENAQ_API_KEY='testkey';assert.equal(health().body.stations,true);
   assert.equal((await call({lat:'abc',lon:'1'})).status,400);assert.equal((await call({lat:'95',lon:'1'})).status,400);assert.equal((await stations({method:'POST',query:{},headers:{},ip:'1'})).status,405);console.log('ok - input validation');
   let r=await call({lat:'17.4',lon:'78.5'});
-  assert.equal(r.status,200);assert.equal(r.body.station.id,2);assert.equal(r.body.station.pm25,42.5);assert.equal(r.body.station.pm10,null);assert.ok(r.body.station.distanceKm<10);assert.ok(r.body.station.ageHours>=1.9&&r.body.station.ageHours<2.5);assert.equal(seen.key,'testkey');
+  assert.equal(r.status,200);assert.equal(r.body.station.id,2);assert.equal(r.body.station.pm25,42.5);assert.equal(r.body.station.latitude,17.45);assert.equal(r.body.station.longitude,78.55);assert.equal(r.body.station.pm10,null);assert.ok(r.body.station.distanceKm<10);assert.ok(r.body.station.ageHours>=1.9&&r.body.station.ageHours<2.5);assert.equal(seen.key,'testkey');
   console.log('ok - nearest station with PM2.5; skips stations without it; ignores -999; sends key header');
   const before=calls;await call({lat:'17.4',lon:'78.5'});assert.equal(calls,before);console.log('ok - result cached');
   mode='lonlat';r=await call({lat:'17.42',lon:'78.51'}); // different cache key (rounded .4/.5) -> same? ensure new key

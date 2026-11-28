@@ -49,3 +49,7 @@ Exact current AQI/PM2.5 questions in five languages now return verified server d
 ## Provider integrity and bounded capacity expansion
 
 Added model-response coordinate, UTC offset, timestamp, particle-unit and forecast-sequence checks plus station ID/unit validation and stale candidate recovery. Expanded the real read-only production probe to 60 requests (six concurrent), with a 5-second p95 ceiling. These are implementation and test changes; wait for the corresponding release evidence before claiming success. No independent clinical, penetration or user-study result is inferred.
+
+## Independent station observation
+
+Added actual station/model comparison workflow using three fixed public cities and the public station endpoint. It records matched concentration values, time separation, grid distance, skipped coverage and signed/absolute differences. Fixture tests reject mismatched units, stale/future readings, duplicate times and unavailable data. The first live workflow must run before reporting real values. This is not clinical validation or a calibrated forecast error estimate.
