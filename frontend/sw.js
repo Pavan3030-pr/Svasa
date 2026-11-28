@@ -1,4 +1,4 @@
-const C = 'svasa-v60', A = ['./', 'index.html', 'app.html', 'css/styles.css', 'css/landing.css', 'css/notifications.css', 'js/app.bundle.js', 'js/landing.bundle.js', 'manifest.json', 'icon.svg'];
+const C = 'svasa-v61', A = ['./', 'index.html', 'app.html', 'css/styles.css', 'css/landing.css', 'css/notifications.css', 'js/app.bundle.js', 'js/landing.bundle.js', 'manifest.json', 'icon.svg'];
 self.addEventListener('install', e => e.waitUntil(caches.open(C).then(c => c.addAll(A)).then(()=>self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x.startsWith('svasa-') && x !== C && x !== 'svasa-inbox-v1').map(x => caches.delete(x)))).then(()=>clients.claim())));
 self.addEventListener('fetch', e => {

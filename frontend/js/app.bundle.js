@@ -1153,9 +1153,23 @@ function resetLabs(){
  $('familyfairness').textContent='Fresh forecast and family profiles required.';
 }
 const labNumber=id=>$(id).value.trim()===''?NaN:Number($(id).value);
+let travelExample=false;
+document.querySelectorAll('[data-planner-jump]').forEach(b=>b.onclick=()=>{
+ const id={day:'dailyworkspace',indoor:'indoorlab',travel:'travellab'}[b.dataset.plannerJump],target=$(id);
+ if(!target)return;
+ if(target.tagName==='DETAILS'){target.open=true;target.querySelector('summary').focus({preventScroll:true});}
+ else{$('optimizeday').focus({preventScroll:true});}
+ target.scrollIntoView({block:'start',behavior:'instant'});
+});
+$('travelexample').onclick=()=>{
+ const values={travelmodea:'Car',travelkma:'5',travelmina:'20',travelfactora:'100',travelmodeb:'Bus',travelkmb:'5',travelminb:'30',travelfactorb:'40'};
+ for(const [id,value] of Object.entries(values))$(id).value=value;
+ travelExample=true;$('travelexamplelabel').textContent='Illustrative factors only — not verified vehicle or regional values.';
+ $('travelresult').textContent='Example loaded. Compare choices to see the trade-off.';
+};
 function labMetric(value,unit){return value.toFixed(1)+' '+unit;}
 $('indoorform').oninput=()=>$('indoorresult').textContent='Inputs changed. Compare scenarios again.';
-$('travelform').oninput=()=>$('travelresult').textContent='Inputs changed. Compare choices again.';
+$('travelform').oninput=()=>{$('travelresult').textContent='Inputs changed. Compare choices again.';if(travelExample)$('travelexamplelabel').textContent='Example edited: verify every factor before applying to a real trip.';};
 $('indoorform').onsubmit=e=>{
  e.preventDefault();
  const input={volume:labNumber('roomvolume'),ach:labNumber('roomach'),initial:labNumber('roominitial'),sourceMg:labNumber('roomsource'),cadr:labNumber('roomcadr'),penetration:labNumber('roompenetration'),deposition:labNumber('roomdeposition')},r=I.indoor(forecast(),input,S),el=$('indoorresult');
@@ -1166,7 +1180,7 @@ $('indoorform').onsubmit=e=>{
 $('travelform').onsubmit=e=>{
  e.preventDefault();const opts=['a','b'].map(k=>({mode:$('travelmode'+k).value,km:labNumber('travelkm'+k),minutes:labNumber('travelmin'+k),factor:labNumber('travelfactor'+k)})),r=I.travel(forecast(),opts,S),el=$('travelresult');
  if(!r){el.textContent='Valid input factors and enough consecutive fresh forecast hours are required.';return;}
- el.innerHTML='<p class="section-kicker">TRAVEL TRADE-OFF · '+esc(st.place?.name||'')+'</p><h3>Departure '+esc(fmtTime(r.start))+'</h3><div class="lab-metrics travel-metrics">'+r.rows.map((x,i)=>'<div><small>Option '+(i?'B':'A')+' · '+esc(x.mode)+'</small><strong>'+x.kg.toFixed(3)+' kg CO₂e</strong><span>'+labMetric(x.ambient,'µg·h/m³')+' ambient proxy</span><small>'+x.minutes+' min · '+x.km+' km</small></div>').join('')+'</div><p>'+ (r.dominant===null?'Trade-off: neither choice is strictly better on all three metrics.':'Option '+(r.dominant?'B':'A')+' is no worse on all three metrics and better on at least one.')+'</p><p class="foot">Based on your factors and durations. No route-specific exposure or health outcome is inferred.</p>';
+ el.innerHTML='<p class="section-kicker">TRAVEL TRADE-OFF · '+esc(st.place?.name||'')+'</p>'+(travelExample?'<p class="foot">Includes illustrative assumptions; verify factors before using for real decisions.</p>':'')+'<h3>Departure '+esc(fmtTime(r.start))+'</h3><div class="lab-metrics travel-metrics">'+r.rows.map((x,i)=>'<div><small>Option '+(i?'B':'A')+' · '+esc(x.mode)+'</small><strong>'+x.kg.toFixed(3)+' kg CO₂e</strong><span>'+labMetric(x.ambient,'µg·h/m³')+' ambient proxy</span><small>'+x.minutes+' min · '+x.km+' km</small></div>').join('')+'</div><p>'+ (r.dominant===null?'Trade-off: neither choice is strictly better on all three metrics.':'Option '+(r.dominant?'B':'A')+' is no worse on all three metrics and better on at least one.')+'</p><p class="foot">Based on your factors and durations. No route-specific exposure or health outcome is inferred.</p>';
 };
 function renderFamilyFairness(){
  const el=$('familyfairness'),r=I.familyFairness(forecast(),family,S,2);

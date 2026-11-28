@@ -37,3 +37,7 @@ Local audit 46030140328 scored 84/100 on one mobile landing sample, with total b
 ## Indoor, sustainable travel and family fairness
 
 New decision labs add an analytic room mass-balance model, user-factor transport comparison, and robust shared family window. Deterministic tests check steady state, filtration and source monotonicity, missing data, emissions arithmetic, partial-hour integration, Pareto trade-offs and family constraints. Browser tests exercise input edits, computed output, mobile overflow and accessibility. None of these tests substitutes for indoor measurements, calibrated local transport factors, independent clinical validation or consenting participants. Release verification must complete before declaring these checks passed.
+
+## First-use usability review
+
+Production Chromium run 46097129541 passed all 21 journeys on 5dd5b0a. Reviewed actual rendered screenshots from the fixture browser artifact 15244056175: numeric fields had browser-default compact targets and new decision labs were buried below the long planner. Added direct workspace navigation, accessible numeric fields, explanatory room-input hints and an explicitly illustrative travel example. New browser checks exercise shortcuts and example calculations. This is developer/automated usability review, not an independent participant study. Live free-text Gemini fell back to rules; simulated push display is not physical-device receipt.
