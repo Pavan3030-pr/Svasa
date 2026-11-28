@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const sha=process.argv[2],run=process.argv[3],source=process.argv[4]||'gallery-artifacts';
 assert.match(sha||'',/^[a-f0-9]{40}$/);assert.match(run||'',/^\d+$/);
-const files=['landing-desktop','dashboard-desktop','planner-desktop','parallel-futures','adaptive-day','airtrust','family-protection','impact-ledger','forecast-desktop','assistant-desktop','cities-desktop','breathe-desktop','landing-mobile','dashboard-mobile','planner-mobile'];
+const files=['landing-desktop','dashboard-desktop','planner-desktop','parallel-futures','forecast-resilience','decision-certificate','constraint-resolution','adaptive-day','airtrust','family-protection','impact-ledger','forecast-desktop','assistant-desktop','cities-desktop','breathe-desktop','landing-mobile','dashboard-mobile','planner-mobile'];
 const target='docs/screenshots/current';fs.mkdirSync(target,{recursive:true});
 for(const name of files){
  const bytes=fs.readFileSync(path.join(source,name+'.png'));
@@ -19,6 +19,8 @@ const lines=[
  '### Personal air dashboard',image('Dashboard with air quality and decision rail','dashboard-desktop'),'',
  '### Parallel Futures — compare two routines',image('Personal air decision workspace','planner-desktop'),'',
  image('Side-by-side original and optimized exposure projections','parallel-futures'),'',
+ '### Forecast resilience and decision proof',image('Four deterministic forecast stress scenarios','forecast-resilience'),'',
+ '| Decision certificate | Constraint resolution |','|:---:|:---:|','| '+image('Recomputed optimality certificate','decision-certificate')+' | '+image('Explicit conflict resolution','constraint-resolution')+' |','',
  '| Adaptive Day | AirTrust |','|:---:|:---:|','| '+image('Adaptive day forecast review','adaptive-day')+' | '+image('AirTrust evidence quality','airtrust')+' |','',
  '### Family Protection',image('Shared forecast window and family profiles','family-protection'),'',
  '### Impact Ledger',image('Saved plans and self-reported completion','impact-ledger'),'',

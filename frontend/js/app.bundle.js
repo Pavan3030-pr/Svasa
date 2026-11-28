@@ -375,7 +375,7 @@ function capture(items,plan,hours,cityKey,profile,policy){
 }
 // Storage is untrusted. Bound the shape and lifespan before restoring any draft.
 function restore(snapshot,S,cityKey,profile,now=Date.now()){
- if(!snapshot||snapshot.version!==1||snapshot.cityKey!==cityKey||snapshot.profile!==profile||!Object.hasOwn(S.PROFILES,profile)||!['exposure','routine'].includes(snapshot.policy)||!Number.isFinite(snapshot.savedAt)||snapshot.savedAt>now+60000||now-snapshot.savedAt>48*3600000||!Array.isArray(snapshot.items)||snapshot.items.length<1||snapshot.items.length>4||!valid(snapshot.exposure)||!Number.isInteger(snapshot.risk)||snapshot.risk<0||snapshot.risk>snapshot.items.length)return null;
+ if(!snapshot||snapshot.version!==1||snapshot.cityKey!==cityKey||snapshot.profile!==profile||!Object.hasOwn(S.PROFILES,profile)||!['exposure','routine','robust'].includes(snapshot.policy)||!Number.isFinite(snapshot.savedAt)||snapshot.savedAt>now+60000||now-snapshot.savedAt>48*3600000||!Array.isArray(snapshot.items)||snapshot.items.length<1||snapshot.items.length>4||!valid(snapshot.exposure)||!Number.isInteger(snapshot.risk)||snapshot.risk<0||snapshot.risk>snapshot.items.length)return null;
  const names=['Commute','Walk','Workout','School','Shopping','Other'];
  if(!snapshot.items.every(a=>a&&names.includes(a.name)&&Number.isInteger(a.duration)&&a.duration>=1&&a.duration<=4&&[0,1,2,4,6].includes(a.flex)&&iso(a.preferredTime)&&iso(a.chosenTime)&&Math.abs(Date.parse(a.preferredTime+'Z')-Date.parse(a.chosenTime+'Z'))<=a.flex*3600000))return null;
  return {cityKey,profile,policy:snapshot.policy,items:snapshot.items.map(a=>({name:a.name,duration:a.duration,flex:a.flex,preferredTime:a.preferredTime,chosenTime:a.chosenTime})),exposure:snapshot.exposure,risk:snapshot.risk};
@@ -385,7 +385,7 @@ function revise(snapshot,hours,S,cityKey,profile){
  if(!Array.isArray(hours)||!hours.length)return {state:'unavailable'};
  const items=snapshot.items.map(a=>{const preferred=hours.findIndex(h=>h.time===a.preferredTime);return {...a,preferred,earliest:Math.max(0,preferred-a.flex),latest:Math.min(hours.length,preferred+a.duration+a.flex)};});
  if(items.some(a=>a.preferred<0||a.preferred+a.duration>hours.length))return {state:'expired'};
- const proposal=S.optimizeDay(hours,items,profile,snapshot.policy);if(!proposal)return {state:'infeasible'};
+ const proposal=snapshot.policy==='robust'?robustPlan(hours,items,S,profile):S.optimizeDay(hours,items,profile,snapshot.policy);if(!proposal)return {state:'infeasible'};
  const original=items.map(a=>slot(hours,hours.findIndex(h=>h.time===a.chosenTime),a.duration,S,profile)),priorValid=original.every((x,i)=>x&&(!i||original[i-1].end<=x.start)),prior=priorValid?original.reduce((n,x)=>n+x.exposure,0):null,changed=proposal.slots.some((x,i)=>x.start!==items[i].chosenTime);
  return {state:changed?'changed':'unchanged',items,proposal,prior,priorRisk:priorValid?original.filter(x=>x.caution).length:null,changed,delta:prior===null?null:prior-proposal.exposure};
 }
@@ -415,7 +415,89 @@ function verifyText(value,ctx,S){
  if(S.effectiveLevel(ctx.aqi,ctx.profile)>=2&&/(?:^|[.!?]\s+)(?:go (?:for a )?|do |try |continue )?(?:run(?:ning)?|jog(?:ging)?|strenuous exercise|intense exercise) (?:outdoors|outside)\b/i.test(recommendation))return false;
  return true;
 }
-return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText};
+
+// Deterministic sensitivity analysis, not a calibrated forecast uncertainty interval.
+// Shift the same hourly AQI/PM pair together; where a neighboring hour is missing,
+// retain the nominal reading and disclose that boundary rule.
+const scenarioIds=['nominal','peak-earlier','peak-later','higher-pm'];
+function scenarioRows(hours,S){
+ const h=hours.slice(0,24);
+ const usable=x=>x&&iso(x.time)&&valid(x.aqi)&&S.band(x.aqi)&&valid(x.pm2_5);
+ const adjacent=(x,y,d)=>usable(x)&&usable(y)&&(d===1?next(x.time)===y.time:next(y.time)===x.time);
+ return [h,h.map((x,i)=>adjacent(x,h[i+1],1)?{...x,aqi:h[i+1].aqi,pm2_5:h[i+1].pm2_5}:x),h.map((x,i)=>adjacent(x,h[i-1],-1)?{...x,aqi:h[i-1].aqi,pm2_5:h[i-1].pm2_5}:x),h.map(x=>usable(x)?{...x,pm2_5:x.pm2_5*1.25}:x)];
+}
+function objectives(t,policy){
+ return policy==='robust'?[t.worstRisk,t.worstExposure,t.shift,t.scenarios[0].exposure]:policy==='routine'?[t.scenarios[0].risk,t.shift,t.scenarios[0].exposure]:[t.scenarios[0].risk,t.scenarios[0].exposure,t.shift];
+}
+const lex=(a,b)=>!b||a.some((v,i)=>v<b[i]&&a.slice(0,i).every((n,j)=>n===b[j]));
+function analyze(hours,items,S,profile){
+ if(!Array.isArray(hours)||!Array.isArray(items)||!items.length||items.length>4||!Object.hasOwn(S.PROFILES,profile))return null;
+ const h=hours.slice(0,24),n=h.length,scenarios=scenarioRows(h,S);
+ if(!items.every(a=>a&&Number.isInteger(a.duration)&&a.duration>=1&&a.duration<=4&&Number.isInteger(a.preferred)&&Number.isInteger(a.earliest)&&Number.isInteger(a.latest)&&a.earliest>=0&&a.latest<=n&&a.earliest<=a.preferred&&a.preferred+a.duration<=a.latest))return null;
+ const options=items.map(a=>Array.from({length:Math.max(0,a.latest-a.earliest-a.duration+1)},(_,k)=>{
+  const index=a.earliest+k,slots=scenarios.map(rows=>slot(rows,index,a.duration,S,profile));
+  return slots.every(Boolean)?{index,endIndex:index+a.duration,slots,shift:Math.abs(index-a.preferred)}:null;
+ }).filter(Boolean));
+ const best={exposure:null,routine:null,robust:null},scores={},chosen=[];let count=0;
+ function walk(k,end){
+  if(k===items.length){
+   count++;
+   const totals=scenarioIds.map((id,j)=>({id,risk:chosen.reduce((n,o)=>n+Number(o.slots[j].caution),0),exposure:chosen.reduce((n,o)=>n+o.slots[j].exposure,0)}));
+   const t={indices:chosen.map(o=>o.index),scenarios:totals,shift:chosen.reduce((n,o)=>n+o.shift,0),worstRisk:Math.max(...totals.map(x=>x.risk)),worstExposure:Math.max(...totals.map(x=>x.exposure))};
+   for(const p of Object.keys(best)){const score=objectives(t,p);if(lex(score,scores[p])){scores[p]=score;best[p]=t;}}
+   return;
+  }
+  for(const o of options[k])if(o.index>=end){chosen.push(o);walk(k+1,o.endIndex);chosen.pop();}
+ }
+ walk(0,0);
+ return {count,best,options:options.map(a=>a.length)};
+}
+function evaluateSchedule(hours,items,indices,S,profile){
+ if(!Array.isArray(indices)||indices.length!==items.length)return null;
+ const scenarios=scenarioRows(hours,S);
+ if(!indices.every((index,i)=>Number.isInteger(index)&&index>=items[i].earliest&&index+items[i].duration<=items[i].latest&&(!i||indices[i-1]+items[i-1].duration<=index)))return null;
+ const totals=scenarios.map((h,j)=>{const s=items.map((a,i)=>slot(h,indices[i],a.duration,S,profile));return s.every(Boolean)?{id:scenarioIds[j],risk:s.filter(x=>x.caution).length,exposure:s.reduce((n,x)=>n+x.exposure,0)}:null;});
+ if(totals.some(x=>!x))return null;
+ return {indices:[...indices],scenarios:totals,shift:indices.reduce((n,x,i)=>n+Math.abs(x-items[i].preferred),0),worstRisk:Math.max(...totals.map(x=>x.risk)),worstExposure:Math.max(...totals.map(x=>x.exposure))};
+}
+function robustPlan(hours,items,S,profile,analysis){
+ const t=(analysis||analyze(hours,items,S,profile))?.best.robust;if(!t)return null;
+ const base=S.optimizeDay(hours,items,profile,'exposure');if(!base)return null;
+ const slots=items.map((a,i)=>({...slot(hours,t.indices[i],a.duration,S,profile),endIndex:t.indices[i]+a.duration,shift:Math.abs(t.indices[i]-a.preferred)}));
+ return {...base,policy:'robust',slots,risk:t.scenarios[0].risk,exposure:t.scenarios[0].exposure,shift:t.shift,changePct:base.baseline>0?Math.round((base.baseline-t.scenarios[0].exposure)/base.baseline*100):null};
+}
+function certificate(hours,items,plan,S,profile,analysis){
+ if(!plan||!['exposure','routine','robust'].includes(plan.policy))return null;
+ const a=analysis||analyze(hours,items,S,profile),t=evaluateSchedule(hours,items,plan.slots.map(x=>x.index),S,profile);if(!a?.count||!t)return null;
+ const score=objectives(t,plan.policy),optimal=objectives(a.best[plan.policy],plan.policy);
+ if(!score.every((v,i)=>Math.abs(v-optimal[i])<=1e-8*Math.max(1,Math.abs(optimal[i]))))return null;
+ return {version:1,method:'Exhaustive ordered non-overlapping hourly schedules; deterministic sensitivity scenarios, not probabilities',profile,policy:plan.policy,hours:hours.slice(0,24).map(x=>x?{time:x.time,aqi:x.aqi,pm2_5:x.pm2_5}:null),items:items.map(({name,duration,preferred,earliest,latest})=>({name,duration,preferred,earliest,latest})),selected:t,feasibleSchedules:a.count,objective:score};
+}
+function verifyCertificate(c,S){
+ try{
+  if(!c||c.version!==1||!['exposure','routine','robust'].includes(c.policy)||!Array.isArray(c.hours)||c.hours.length>24||!Array.isArray(c.items)||c.items.length>4)return false;
+  const a=analyze(c.hours,c.items,S,c.profile);if(!a?.count||a.count!==c.feasibleSchedules)return false;
+  const t=evaluateSchedule(c.hours,c.items,c.selected.indices,S,c.profile);if(!t)return false;
+  const score=objectives(t,c.policy),optimal=objectives(a.best[c.policy],c.policy);
+  return JSON.stringify(t)===JSON.stringify(c.selected)&&JSON.stringify(score)===JSON.stringify(c.objective)&&score.every((v,i)=>Math.abs(v-optimal[i])<=1e-8*Math.max(1,Math.abs(optimal[i])));
+ }catch(_){return false;}
+}
+function conflict(hours,items,S,profile){
+ const a=analyze(hours,items,S,profile);if(!a||a.count)return null;
+ const n=Math.min(hours.length,24),suggestions=[];
+ // Search one activity's flexibility at a time. A fixed commitment is never changed automatically.
+ for(let i=0;i<items.length;i++){
+  const x=items[i],old=Number.isInteger(x.flex)?x.flex:Math.max(x.preferred-x.earliest,x.latest-x.preferred-x.duration);
+  for(const flex of [1,2,4,6].filter(v=>v>old)){
+   const revised=items.map((v,j)=>j===i?{...v,earliest:Math.max(0,v.preferred-flex),latest:Math.min(n,v.preferred+v.duration+flex)}:v);
+   if(S.optimizeDay(hours,revised,profile,'exposure')){suggestions.push({index:i,name:x.name,flex,added:Math.max(0,x.preferred-revised[i].earliest-old,revised[i].latest-x.preferred-x.duration-old),fixed:x.flex===0});break;}
+  }
+ }
+ suggestions.sort((x,y)=>x.added-y.added||Number(x.fixed)-Number(y.fixed)||x.index-y.index);
+ return {missing:items.filter((_,i)=>!a.options[i]).map(x=>x.name),suggestion:suggestions[0]||null};
+}
+
+return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText,analyze,evaluateSchedule,robustPlan,certificate,verifyCertificate,conflict};
 });
 
 ;
@@ -428,7 +510,7 @@ function recentReports(){const now=Date.now(),cutoff=now-7*86400000;return repor
 function renderReports(){
   const entries=recentReports();
   $('reportsummary').textContent=entries.length?entries.length+' saved projected schedules · '+entries.filter(x=>x.changePct>0).length+' lower than their preferred schedule.':'No saved plans yet. Optimize a day and choose Save projected schedule.';
-  $('reportlist').innerHTML=entries.map(x=>'<article class="reportentry"><h3>'+esc(x.city)+'</h3><small>'+esc(new Date(x.createdAt).toLocaleString())+'</small><p><strong>'+x.exposure.toFixed(1)+' µg·h/m³</strong> projected concentration-time proxy'+(Number.isFinite(x.changePct)?' · '+Math.abs(x.changePct)+'% '+(x.changePct===0?'change':x.changePct>0?'lower':'higher')+' versus preferred schedule':'')+'</p>'+(Number.isFinite(x.shift)?'<p class="muted">'+(x.policy==='routine'?'Closer to routine':'Lower pollution')+' · '+x.shift+'h total shift</p>':'')+'<p class="muted">Model forecast, not measured personal exposure.</p></article>').join('');
+  $('reportlist').innerHTML=entries.map(x=>'<article class="reportentry"><h3>'+esc(x.city)+'</h3><small>'+esc(new Date(x.createdAt).toLocaleString())+'</small><p><strong>'+x.exposure.toFixed(1)+' µg·h/m³</strong> projected concentration-time proxy'+(Number.isFinite(x.changePct)?' · '+Math.abs(x.changePct)+'% '+(x.changePct===0?'change':x.changePct>0?'lower':'higher')+' versus preferred schedule':'')+'</p>'+(Number.isFinite(x.shift)?'<p class="muted">'+(x.policy==='routine'?'Closer to routine':x.policy==='robust'?'Forecast resilience':'Lower pollution')+' · '+x.shift+'h total shift</p>':'')+'<p class="muted">Model forecast, not measured personal exposure.</p></article>').join('');
   const stats=window.SvasaIntelligence.ledger(entries),el=$('impactledger');
   el.innerHTML='<p class="section-kicker">IMPACT LEDGER / SELF-REPORTED</p><h3>From plans to actions</h3><div class="decisionbaseline"><div><small>Saved plans</small><strong>'+stats.saved+'</strong></div><div><small>Marked completed</small><strong>'+stats.completed+'</strong></div><div><small>Completed with lower projection</small><strong>'+stats.completedLower+'</strong></div></div><p class="muted">Completion is self-reported. The original forecast comparison is not actual exposure avoided; overlapping plans are not added together.</p>'+entries.map((x,i)=>'<div class="scheduleitem"><strong>'+esc(x.city)+'</strong><span>'+esc(new Date(x.createdAt).toLocaleString())+'</span><button type="button" class="btn ghost sm" data-complete="'+i+'" aria-pressed="'+String(x.completed===true)+'">'+(x.completed===true?'Undo completion':'Mark completed')+'</button></div>').join('');
   el.onclick=e=>{const b=e.target.closest('[data-complete]');if(!b)return;const x=entries[Number(b.dataset.complete)];if(!x)return;const updated={...x,completed:x.completed!==true,completedAt:x.completed===true?null:new Date().toISOString()};const next=reports.map(r=>r===x?updated:r);if(!store.set('svasa_reports',next)){banner('Could not update completion on this device.');return;}reports=next;renderReports();};
@@ -1009,7 +1091,7 @@ let family=store.get('svasa_family',[]);
 if(!Array.isArray(family))family=[];
 family=family.filter(x=>x&&typeof x.name==='string'&&Object.hasOwn(S.PROFILES,x.profile)).slice(0,6);
 const forecast=()=>st.data&&!st.demo&&!st.stale?S.hourlyFrom(st.data,st.data.current.time):[];
-function invalidatePlan(){currentPlan=null;decisionPlans=null;$('saveplan').disabled=true;$('decisionchoices').hidden=true;$('parallelfutures').hidden=true;}
+function invalidatePlan(){currentPlan=null;decisionPlans=null;$('saveplan').disabled=true;$('decisionchoices').hidden=true;$('parallelfutures').hidden=true;$('resilience').hidden=true;$('constraintconflict').hidden=true;$('decisionproof').hidden=true;$('proofstatus').textContent='';}
 function renderActivityTimes(){
   invalidatePlan();
   const hrs=forecast(), box=$('activities');
@@ -1027,25 +1109,42 @@ $('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)retu
 $('addactivity').onclick=()=>{if(activities.length>=4)return;clearReview();activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('optimizeday').onclick=()=>{
   const hrs=forecast(),items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
-  invalidatePlan();const exposure=S.optimizeDay(hrs,items,st.profile,'exposure'),routine=S.optimizeDay(hrs,items,st.profile,'routine');
-  if(!exposure||!routine){$('dayresult').textContent='No feasible schedule with complete data. Widen time flexibility, shorten durations or change preferred times.';return;}
-  decisionPlans={exposure,routine,items};$('decisionchoices').hidden=false;
-  for(const [name,plan] of Object.entries({exposure,routine})){$(name+'metric').textContent=plan.exposure.toFixed(1)+' µg·h/m³';$(name+'shift').textContent=plan.shift+'h total time shifted · '+plan.risk+' caution '+(plan.risk===1?'activity':'activities');}
-  $('decisionnote').textContent=exposure.slots.every((x,i)=>x.index===routine.slots[i].index)?'Both priorities produce the same schedule with these constraints.':'Compare the pollution proxy and disruption; both options keep fixed commitments and minimize caution activities.';
+  invalidatePlan();const analysis=I.analyze(hrs,items,S,st.profile),exposure=S.optimizeDay(hrs,items,st.profile,'exposure'),routine=S.optimizeDay(hrs,items,st.profile,'routine'),robust=I.robustPlan(hrs,items,S,st.profile,analysis);
+  if(!exposure||!routine||!robust){$('dayresult').textContent='No feasible schedule with complete data. Review the constraints below.';renderConflict(hrs,items);return;}
+  decisionPlans={exposure,routine,robust,items,analysis};$('decisionchoices').hidden=false;
+  for(const [name,plan] of Object.entries({exposure,routine,robust})){$(name+'metric').textContent=plan.exposure.toFixed(1)+' µg·h/m³';$(name+'shift').textContent=plan.shift+'h total time shifted · '+plan.risk+' nominal caution '+(plan.risk===1?'activity':'activities');}
+  $('robustmetric').textContent=metric(analysis.best.robust.worstExposure);$('robustshift').textContent='Worst tested proxy · '+analysis.best.robust.worstRisk+' caution activities · '+robust.shift+'h shift';
+  $('decisionnote').textContent='All priorities preserve fixed commitments. Compare nominal pollution, disruption and sensitivity to forecast changes.';
   chooseDecision('exposure');inbox?.emit('Your day plan is ready','Compare pollution and schedule disruption before saving.','plan');
 };
 function chooseDecision(policy){
   if(!decisionPlans||!forecast().length)return;const plan=decisionPlans[policy],items=decisionPlans.items;if(!plan)return;
-  for(const k of ['exposure','routine'])$('decision'+k).setAttribute('aria-pressed',String(policy===k));
+  for(const k of ['exposure','routine','robust'])$('decision'+k).setAttribute('aria-pressed',String(policy===k));
   reviewSnapshot=I.capture(items,plan,forecast(),cityKey(),st.profile,policy);$('adaptiveday').hidden=true;
-  renderFutures(items,plan);
-  currentPlan={createdAt:new Date().toISOString(),completed:false,city:st.place.name,profile:st.profile,policy,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
+  renderFutures(items,plan);const proof=I.certificate(forecast(),items,plan,S,st.profile,decisionPlans.analysis);renderResilience(proof,decisionPlans.analysis);
+  currentPlan={createdAt:new Date().toISOString(),completed:false,city:st.place.name,profile:st.profile,policy,decisionCertificate:proof,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
   const change=plan.changePct==null?'Original schedule unavailable or overlapping.':plan.changePct===0?'No change in concentration-time proxy.':(plan.changePct>0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
   const moved=plan.slots.map((x,i)=>{const delta=x.index-items[i].preferred;return '<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>'+ (items[i].flex===0?'Fixed commitment · ':delta===0?'Unchanged · ':Math.abs(delta)+'h '+(delta<0?'earlier':'later')+' · ')+'Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>';}).join('');
   const baseline=plan.baseline===null?'Preferred schedule unavailable':plan.baseline.toFixed(1)+' µg·h/m³';
   $('dayresult').innerHTML='<p class="section-kicker">YOUR PROPOSED SCHEDULE</p><h3>Review the timing</h3><p class="muted">'+esc(change)+'</p><div class="decisionbaseline"><div><small>Activities retained</small><strong>'+items.length+' / '+items.length+'</strong></div><div><small>Total time shifted</small><strong>'+plan.shift+'h</strong></div><div><small>Caution activities</small><strong>'+plan.risk+(plan.baselineRisk===null?'':' / '+plan.baselineRisk+' before')+'</strong></div></div>'+moved+(plan.risk?'<p class="healthadvisory">Some windows still need caution. Consider moving those activities indoors.</p>':'');
 }
-$('decisionexposure').onclick=()=>chooseDecision('exposure');$('decisionroutine').onclick=()=>chooseDecision('routine');
+$('decisionexposure').onclick=()=>chooseDecision('exposure');$('decisionroutine').onclick=()=>chooseDecision('routine');$('decisionrobust').onclick=()=>chooseDecision('robust');
+function renderConflict(hrs,items){
+ const el=$('constraintconflict'),r=I.conflict(hrs,items,S,st.profile);el.hidden=false;
+ const suggestion=r?.suggestion;
+ el.innerHTML='<p class="section-kicker">CONSTRAINT RESOLUTION</p><h3>No feasible combination</h3><p>'+esc(r?.missing.length?'No complete forecast slot for: '+r.missing.join(', ')+'.':'Activities cannot fit in their current order and time windows.')+'</p>'+(suggestion?'<p>Smallest supported single-activity flexibility change: <strong>'+esc(suggestion.name)+'</strong> → ±'+suggestion.flex+'h.'+(suggestion.fixed?' This would relax a fixed commitment; only do so if you can move it.':'')+'</p><button type="button" class="btn ghost sm" id="applyconflict">Apply this change and re-optimize</button>':'<p>Changing one flexibility setting is insufficient. Review activity order, preferred times, duration or missing forecast hours.</p>')+'<p class="foot">Nothing is changed automatically.</p>';
+ if(suggestion)$('applyconflict').onclick=()=>{clearReview();activities[suggestion.index].flex=suggestion.flex;renderActivityTimes();$('optimizeday').click();};
+}
+function renderResilience(proof,analysis){
+ const el=$('resilience'),panel=$('decisionproof');el.hidden=false;panel.hidden=!proof;panel.open=false;$('proofstatus').textContent='';
+ if(!proof){el.textContent='Decision certificate unavailable for this schedule.';return;}
+ const t=proof.selected,labels={'nominal':'Nominal forecast','peak-earlier':'Peaks 1h earlier','peak-later':'Peaks 1h later','higher-pm':'PM2.5 +25%'};
+ const reference=analysis.best.robust;
+ el.innerHTML='<p class="section-kicker">FORECAST RESILIENCE / STRESS TEST</p><h3>How does your plan hold up?</h3><div class="resilience-metrics"><div><small>Worst tested caution count</small><strong>'+t.worstRisk+' / '+proof.items.length+'</strong></div><div><small>Worst tested proxy</small><strong>'+esc(metric(t.worstExposure))+'</strong></div></div><div class="scenario-rows">'+t.scenarios.map(x=>'<div><strong>'+labels[x.id]+'</strong><span>'+esc(metric(x.exposure))+'</span><small>'+x.risk+' caution</small></div>').join('')+'</div><p class="muted">Resilient priority optimum: '+esc(metric(reference.worstExposure))+' worst tested proxy, '+reference.worstRisk+' worst tested caution activities. Compare priorities before saving.</p><p class="foot">Illustrative scenarios, not probabilities or calibrated forecast bounds. At forecast edges or gaps, the nominal hour is retained. PM-only stress keeps nominal AQI.</p>';
+ $('proofsummary').textContent=proof.feasibleSchedules+' feasible schedules enumerated. Certificate records inputs, constraints, objective and selected indices; it verifies optimality under this model, not data authenticity.';
+ $('verifyproof').onclick=()=>{$('proofstatus').textContent=I.verifyCertificate(proof,S)?'Verified: selected objective matches exhaustive optimum.':'Verification failed.';};
+ $('exportproof').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(proof,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='svasa-decision-certificate.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+}
 function renderFamily(){
   renderFamilyWindow();
   const box=$('familyresults'), live=st.data&&!st.demo&&!st.stale;

@@ -9,7 +9,7 @@ SVASA turns air-quality forecasts into practical, constraint-aware outdoor decis
 ## Application gallery
 
 <!-- SVASA_GALLERY_START -->
-Actual application UI captured by automated Chromium on commit 3c83d88. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46018202847).
+Actual application UI captured by automated Chromium on commit 717435f. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46019444969).
 
 ### Landing experience
 ![SVASA landing page](docs/screenshots/current/landing-desktop.png)
@@ -56,8 +56,11 @@ Actual application UI captured by automated Chromium on commit 3c83d88. **Contro
 | **Family Protection** | Rank a shared one-hour window by the number of profiles needing caution, then PM2.5 and AQI. |
 | **AI decision verification** | Ground Gemini answers in server-verified air data; check response structure, language script, numerical claims and selected safety constraints. Emergency bypass and labelled fallback remain available. |
 | **Impact Ledger** | Record saved projected schedules and self-reported completion, with undo and optional local export. |
+| **Forecast Resilience** | Compare four deterministic stress scenarios and choose a minimax schedule without moving fixed commitments. |
+| **Constraint Resolution** | Explain infeasibility and propose the smallest supported single-activity flexibility change, with explicit consent. |
+| **Decision Certificate** | Export forecast inputs, constraints, scenario totals and objective; recompute the optimum locally to check the result. |
 
-The planner uses dynamic programming to find an exact optimum under either of two priorities: after minimizing caution activities, minimize the forecast concentration-time proxy or the total hours shifted. Fixed commitments stay fixed. It supports up to four ordered outdoor activities. Neither the proxy nor completion is measured exposure, an inhaled dose or a health outcome.
+The planner uses dynamic programming for nominal pollution and routine priorities, and bounded exhaustive enumeration for forecast resilience. The robust priority minimizes worst tested caution count, worst tested concentration-time proxy, total shift and nominal proxy, in that order. The four stress scenarios are illustrative, not calibrated uncertainty bounds. Fixed commitments stay fixed unless the user explicitly chooses to relax a conflict. It supports up to four ordered outdoor activities. Neither the proxy nor completion is measured exposure, an inhaled dose or a health outcome.
 
 Other modules: live model dashboard, hourly and historical forecast, trip planning, city comparison, guided breathing, multilingual assistant, notifications and opt-in daily push, offline snapshots with stale-data planning disabled, and PWA installation where supported.
 

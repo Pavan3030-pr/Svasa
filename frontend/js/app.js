@@ -465,7 +465,7 @@ let family=store.get('svasa_family',[]);
 if(!Array.isArray(family))family=[];
 family=family.filter(x=>x&&typeof x.name==='string'&&Object.hasOwn(S.PROFILES,x.profile)).slice(0,6);
 const forecast=()=>st.data&&!st.demo&&!st.stale?S.hourlyFrom(st.data,st.data.current.time):[];
-function invalidatePlan(){currentPlan=null;decisionPlans=null;$('saveplan').disabled=true;$('decisionchoices').hidden=true;$('parallelfutures').hidden=true;}
+function invalidatePlan(){currentPlan=null;decisionPlans=null;$('saveplan').disabled=true;$('decisionchoices').hidden=true;$('parallelfutures').hidden=true;$('resilience').hidden=true;$('constraintconflict').hidden=true;$('decisionproof').hidden=true;$('proofstatus').textContent='';}
 function renderActivityTimes(){
   invalidatePlan();
   const hrs=forecast(), box=$('activities');
@@ -483,25 +483,42 @@ $('activities').onclick=e=>{const b=e.target.closest('[data-remove]');if(!b)retu
 $('addactivity').onclick=()=>{if(activities.length>=4)return;clearReview();activities.push({name:'Walk',duration:1,preferred:Math.min(23,activities.length*3),flex:2});renderActivityTimes();$('dayresult').textContent='Plan changed. Optimize again.';};
 $('optimizeday').onclick=()=>{
   const hrs=forecast(),items=activities.map(x=>({...x,earliest:Math.max(0,x.preferred-x.flex),latest:Math.min(hrs.length,x.preferred+x.duration+x.flex)}));
-  invalidatePlan();const exposure=S.optimizeDay(hrs,items,st.profile,'exposure'),routine=S.optimizeDay(hrs,items,st.profile,'routine');
-  if(!exposure||!routine){$('dayresult').textContent='No feasible schedule with complete data. Widen time flexibility, shorten durations or change preferred times.';return;}
-  decisionPlans={exposure,routine,items};$('decisionchoices').hidden=false;
-  for(const [name,plan] of Object.entries({exposure,routine})){$(name+'metric').textContent=plan.exposure.toFixed(1)+' µg·h/m³';$(name+'shift').textContent=plan.shift+'h total time shifted · '+plan.risk+' caution '+(plan.risk===1?'activity':'activities');}
-  $('decisionnote').textContent=exposure.slots.every((x,i)=>x.index===routine.slots[i].index)?'Both priorities produce the same schedule with these constraints.':'Compare the pollution proxy and disruption; both options keep fixed commitments and minimize caution activities.';
+  invalidatePlan();const analysis=I.analyze(hrs,items,S,st.profile),exposure=S.optimizeDay(hrs,items,st.profile,'exposure'),routine=S.optimizeDay(hrs,items,st.profile,'routine'),robust=I.robustPlan(hrs,items,S,st.profile,analysis);
+  if(!exposure||!routine||!robust){$('dayresult').textContent='No feasible schedule with complete data. Review the constraints below.';renderConflict(hrs,items);return;}
+  decisionPlans={exposure,routine,robust,items,analysis};$('decisionchoices').hidden=false;
+  for(const [name,plan] of Object.entries({exposure,routine,robust})){$(name+'metric').textContent=plan.exposure.toFixed(1)+' µg·h/m³';$(name+'shift').textContent=plan.shift+'h total time shifted · '+plan.risk+' nominal caution '+(plan.risk===1?'activity':'activities');}
+  $('robustmetric').textContent=metric(analysis.best.robust.worstExposure);$('robustshift').textContent='Worst tested proxy · '+analysis.best.robust.worstRisk+' caution activities · '+robust.shift+'h shift';
+  $('decisionnote').textContent='All priorities preserve fixed commitments. Compare nominal pollution, disruption and sensitivity to forecast changes.';
   chooseDecision('exposure');inbox?.emit('Your day plan is ready','Compare pollution and schedule disruption before saving.','plan');
 };
 function chooseDecision(policy){
   if(!decisionPlans||!forecast().length)return;const plan=decisionPlans[policy],items=decisionPlans.items;if(!plan)return;
-  for(const k of ['exposure','routine'])$('decision'+k).setAttribute('aria-pressed',String(policy===k));
+  for(const k of ['exposure','routine','robust'])$('decision'+k).setAttribute('aria-pressed',String(policy===k));
   reviewSnapshot=I.capture(items,plan,forecast(),cityKey(),st.profile,policy);$('adaptiveday').hidden=true;
-  renderFutures(items,plan);
-  currentPlan={createdAt:new Date().toISOString(),completed:false,city:st.place.name,profile:st.profile,policy,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
+  renderFutures(items,plan);const proof=I.certificate(forecast(),items,plan,S,st.profile,decisionPlans.analysis);renderResilience(proof,decisionPlans.analysis);
+  currentPlan={createdAt:new Date().toISOString(),completed:false,city:st.place.name,profile:st.profile,policy,decisionCertificate:proof,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
   const change=plan.changePct==null?'Original schedule unavailable or overlapping.':plan.changePct===0?'No change in concentration-time proxy.':(plan.changePct>0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
   const moved=plan.slots.map((x,i)=>{const delta=x.index-items[i].preferred;return '<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>'+ (items[i].flex===0?'Fixed commitment · ':delta===0?'Unchanged · ':Math.abs(delta)+'h '+(delta<0?'earlier':'later')+' · ')+'Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>';}).join('');
   const baseline=plan.baseline===null?'Preferred schedule unavailable':plan.baseline.toFixed(1)+' µg·h/m³';
   $('dayresult').innerHTML='<p class="section-kicker">YOUR PROPOSED SCHEDULE</p><h3>Review the timing</h3><p class="muted">'+esc(change)+'</p><div class="decisionbaseline"><div><small>Activities retained</small><strong>'+items.length+' / '+items.length+'</strong></div><div><small>Total time shifted</small><strong>'+plan.shift+'h</strong></div><div><small>Caution activities</small><strong>'+plan.risk+(plan.baselineRisk===null?'':' / '+plan.baselineRisk+' before')+'</strong></div></div>'+moved+(plan.risk?'<p class="healthadvisory">Some windows still need caution. Consider moving those activities indoors.</p>':'');
 }
-$('decisionexposure').onclick=()=>chooseDecision('exposure');$('decisionroutine').onclick=()=>chooseDecision('routine');
+$('decisionexposure').onclick=()=>chooseDecision('exposure');$('decisionroutine').onclick=()=>chooseDecision('routine');$('decisionrobust').onclick=()=>chooseDecision('robust');
+function renderConflict(hrs,items){
+ const el=$('constraintconflict'),r=I.conflict(hrs,items,S,st.profile);el.hidden=false;
+ const suggestion=r?.suggestion;
+ el.innerHTML='<p class="section-kicker">CONSTRAINT RESOLUTION</p><h3>No feasible combination</h3><p>'+esc(r?.missing.length?'No complete forecast slot for: '+r.missing.join(', ')+'.':'Activities cannot fit in their current order and time windows.')+'</p>'+(suggestion?'<p>Smallest supported single-activity flexibility change: <strong>'+esc(suggestion.name)+'</strong> → ±'+suggestion.flex+'h.'+(suggestion.fixed?' This would relax a fixed commitment; only do so if you can move it.':'')+'</p><button type="button" class="btn ghost sm" id="applyconflict">Apply this change and re-optimize</button>':'<p>Changing one flexibility setting is insufficient. Review activity order, preferred times, duration or missing forecast hours.</p>')+'<p class="foot">Nothing is changed automatically.</p>';
+ if(suggestion)$('applyconflict').onclick=()=>{clearReview();activities[suggestion.index].flex=suggestion.flex;renderActivityTimes();$('optimizeday').click();};
+}
+function renderResilience(proof,analysis){
+ const el=$('resilience'),panel=$('decisionproof');el.hidden=false;panel.hidden=!proof;panel.open=false;$('proofstatus').textContent='';
+ if(!proof){el.textContent='Decision certificate unavailable for this schedule.';return;}
+ const t=proof.selected,labels={'nominal':'Nominal forecast','peak-earlier':'Peaks 1h earlier','peak-later':'Peaks 1h later','higher-pm':'PM2.5 +25%'};
+ const reference=analysis.best.robust;
+ el.innerHTML='<p class="section-kicker">FORECAST RESILIENCE / STRESS TEST</p><h3>How does your plan hold up?</h3><div class="resilience-metrics"><div><small>Worst tested caution count</small><strong>'+t.worstRisk+' / '+proof.items.length+'</strong></div><div><small>Worst tested proxy</small><strong>'+esc(metric(t.worstExposure))+'</strong></div></div><div class="scenario-rows">'+t.scenarios.map(x=>'<div><strong>'+labels[x.id]+'</strong><span>'+esc(metric(x.exposure))+'</span><small>'+x.risk+' caution</small></div>').join('')+'</div><p class="muted">Resilient priority optimum: '+esc(metric(reference.worstExposure))+' worst tested proxy, '+reference.worstRisk+' worst tested caution activities. Compare priorities before saving.</p><p class="foot">Illustrative scenarios, not probabilities or calibrated forecast bounds. At forecast edges or gaps, the nominal hour is retained. PM-only stress keeps nominal AQI.</p>';
+ $('proofsummary').textContent=proof.feasibleSchedules+' feasible schedules enumerated. Certificate records inputs, constraints, objective and selected indices; it verifies optimality under this model, not data authenticity.';
+ $('verifyproof').onclick=()=>{$('proofstatus').textContent=I.verifyCertificate(proof,S)?'Verified: selected objective matches exhaustive optimum.':'Verification failed.';};
+ $('exportproof').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(proof,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='svasa-decision-certificate.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+}
 function renderFamily(){
   renderFamilyWindow();
   const box=$('familyresults'), live=st.data&&!st.demo&&!st.stale;
