@@ -27,7 +27,7 @@ module.exports = async function ask(req) {
       return R(200,{sections:value,answer:[value.recommendation,value.reason,value.limitation].join('\n'),source:'verified',evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window}});
     }
     const r = await gemini.generate(q, ctx);
-    if(r.reason){const value=require('../lib/quota-guidance')(ctx,q,r.reason);return R(200,{sections:value,answer:[value.recommendation,value.reason,value.limitation].join('\n'),source:'rules',reason:r.reason,evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window}});}
+    if(r.reason){const value=require('../lib/quota-guidance')(ctx,q,r.reason);return R(200,{sections:value,answer:[value.recommendation,value.reason,value.limitation].join('\n'),source:'rules',reason:r.reason,...(r.diagnostic?{providerDiagnostic:require('../lib/provider-quota').safeDiagnostic(r.diagnostic)}:{}),evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window}});}
     if (r.error) return R(r.status, { error: r.error });
     if (r.value.kind === 'offtopic') return R(200, { answer: 'I can only help with air quality, health and outdoor planning.', source: 'offtopic' });
     return R(200, { sections:r.value, answer: [r.value.recommendation,r.value.reason,r.value.limitation].join('\n') + '\n' + S.sources(ctx, ctx.lang) + ' (UTC) · Open-Meteo / CAMS · ' + ctx.observedAt, source: 'gemini', evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window} });

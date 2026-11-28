@@ -15,3 +15,7 @@ The bounded production read-only capacity probe now uses 60 requests, six concur
 ### Independent station comparison
 
 A bounded observation workflow runs every six hours and on relevant source changes. It checks three fixed public cities through the deployed station endpoint and requests the hourly model at the selected public monitoring station coordinates. It accepts only fresh station measurements, matching model units, UTC timestamps and model hours within 30 minutes, reporting paired values and mean signed/absolute differences with coverage. A run with no pairs fails and retains the missing-data report. This is independent station versus model comparison, not validated forecast calibration; station averaging intervals may differ and results are not representative of every street or population. No user information or additional API keys are collected.
+
+### Gemini quota diagnosis
+
+Actual upstream HTTP 429 responses are distinguished from local and shared cooldowns. Structured Google QuotaFailure and RetryInfo fields are reduced to fixed enums and a bounded retry delay; raw error text, project identifiers and credentials are never logged or returned. The strict evaluation still requires all five live responses and fails for unavailable quota; it stops futile retries when a daily/zero quota or a cooldown beyond the test window is declared. Check the Google AI Studio rate-limit and billing pages for account-side fixes. No billing, key, model or quota was changed.

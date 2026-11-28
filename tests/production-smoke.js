@@ -28,7 +28,7 @@ async function check(name,fn){try{out.checks[name]=await fn();}catch(e){out.chec
     const evidence=Number.isFinite(r.data.evidence?.aqi)&&Number.isFinite(Date.parse(r.data.evidence?.observedAt))&&r.data.evidence?.source==='Open-Meteo / CAMS model';
     const live=r.status===200&&r.data.source==='gemini'&&fields.every(x=>x.script)&&evidence;
     const fallback=r.status===200&&r.data.source==='rules'&&['provider_rate_limit','provider_network','provider_unavailable','provider_rejected','provider_unconfigured','invalid_model_response','provider_budget_unavailable','provider_budget_exhausted'].includes(r.data.reason)&&fields.every(x=>x.script)&&evidence;
-    results.push({lang,status:r.status,source:r.data.source||null,reason:r.data.reason||null,attempts:r.attempts,fields,evidence,result:live?'live Gemini':fallback?'verified provider fallback':'fail'});
+    results.push({lang,status:r.status,source:r.data.source||null,reason:r.data.reason||null,providerDiagnostic:r.data.providerDiagnostic||null,attempts:r.attempts,fields,evidence,result:live?'live Gemini':fallback?'verified provider fallback':'fail'});
    }catch(_){results.push({lang,result:'fail',reason:'Network or response parse failure'});}
   }
   const usable=results.every(x=>x.result==='live Gemini'||x.result==='verified provider fallback'),live=results.every(x=>x.result==='live Gemini');

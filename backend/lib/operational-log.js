@@ -11,6 +11,7 @@ function event(route,result,elapsed){
   const source=result?.body?.source,reason=result?.body?.reason;
   if(sources.has(source))record.source=source;
   if(reasons.has(reason))record.reason=reason;
+  const diagnostic=require('./provider-quota').safeDiagnostic(result?.body?.providerDiagnostic);if(reason==='provider_rate_limit'&&diagnostic)record.providerDiagnostic=diagnostic;
   if(status===200&&source==='rules')record.outcome='fallback';
  }else if(route==='stations'&&status===200){const s=result?.body?.station;record.station=s&&Number.isFinite(s.ageHours)?s.ageHours<=3?'fresh':'stale':s?'unknown-age':'not-found';}
  return record;
