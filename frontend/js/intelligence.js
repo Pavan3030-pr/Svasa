@@ -162,5 +162,53 @@ function conflict(hours,items,S,profile){
  return {missing:items.filter((_,i)=>!a.options[i]).map(x=>x.name),suggestion:suggestions[0]||null};
 }
 
-return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText,analyze,evaluateSchedule,robustPlan,certificate,verifyCertificate,conflict};
+
+// Single-zone, well-mixed PM2.5 mass balance. Inputs are scenario assumptions,
+// not measured room properties. Exact hourly solution and time integral.
+function indoor(hours,input,S){
+ const {volume,ach,penetration,deposition,initial,sourceMg,cadr}=input||{};
+ if(![[volume,5,1000],[ach,0.1,15],[penetration,0,1],[deposition,0,5],[initial,0,2000],[sourceMg,0,100],[cadr,0,3000]].every(([v,a,b])=>Number.isFinite(v)&&v>=a&&v<=b))return null;
+ if(!Array.isArray(hours)||!slot(hours,0,4,S,'general')||!slot(hours,4,2,S,'general')||next(hours[3].time)!==hours[4].time)return null;
+ function run(filtration,multiplier){
+  let current=initial,total=0;const rows=[];
+  for(const h of hours.slice(0,6)){
+   const removal=ach+deposition+filtration/volume,steady=(ach*penetration*h.pm2_5*multiplier+sourceMg*1000/volume)/removal;
+   const decay=-Math.expm1(-removal),end=current+(steady-current)*decay,mean=steady+(current-steady)*decay/removal;
+   total+=mean;rows.push({time:h.time,mean:Math.max(0,mean),end:Math.max(0,end)});current=end;
+  }
+  return {rows,mean:Math.max(0,total/6),end:Math.max(0,current)};
+ }
+ return {start:hours[0].time,end:next(hours[5].time),baseline:run(0,1),filtered:run(cadr,1),stress:run(cadr,1.25),equivalentACH:cadr/volume};
+}
+// Compare a shared start time with different user-supplied trip durations,
+// distances and emissions factors. Ambient proxy is NOT in-vehicle exposure.
+function travel(hours,options,S){
+ if(!Array.isArray(hours)||!Array.isArray(options)||options.length!==2)return null;
+ const rows=options.map(o=>{
+  if(!o||!['Car','Bus','Rail','Walk','Cycle','Other'].includes(o.mode)||!Number.isFinite(o.km)||o.km<=0||o.km>500||!Number.isInteger(o.minutes)||o.minutes<1||o.minutes>240||!Number.isFinite(o.factor)||o.factor<0||o.factor>2000)return null;
+  const n=Math.ceil(o.minutes/60),s=slot(hours,0,n,S,'general');if(!s)return null;
+  let left=o.minutes,ambient=0;for(const h of hours.slice(0,n)){const part=Math.min(left,60);ambient+=h.pm2_5*part/60;left-=part;}
+  return {...o,ambient,kg:o.km*o.factor/1000};
+ });
+ if(rows.some(x=>!x))return null;
+ const [a,b]=rows,dominates=(x,y)=>x.ambient<=y.ambient&&x.kg<=y.kg&&x.minutes<=y.minutes&&(x.ambient<y.ambient||x.kg<y.kg||x.minutes<y.minutes);
+ return {start:hours[0].time,rows,dominant:dominates(a,b)?0:dominates(b,a)?1:null,deltaKg:b.kg-a.kg,deltaAmbient:b.ambient-a.ambient};
+}
+// Shared activity, not a solution to independent family calendars. The most
+// severe profile-level caution is optimized first, then number of cautions,
+// then worst scenario concentration-time and nominal concentration-time.
+function familyFairness(hours,members,S,duration=2){
+ if(!Array.isArray(hours)||!Array.isArray(members)||members.length<1||members.length>6||!members.every(m=>m&&Object.hasOwn(S.PROFILES,m.profile))||!Number.isInteger(duration)||duration<1||duration>4)return null;
+ const scenarios=scenarioRows(hours,S);let best=null,score=null;
+ for(let i=0;i<=Math.min(hours.length,24)-duration;i++){
+  const slots=scenarios.map(h=>slot(h,i,duration,S,'general'));if(!slots.every(Boolean))continue;
+  const levels=members.map(m=>({name:m.name,profile:m.profile,nominal:S.effectiveLevel(slots[0].peak,m.profile),worst:Math.max(...slots.map(s=>S.effectiveLevel(s.peak,m.profile)))}));
+  const worst=Math.max(...levels.map(m=>m.worst)),count=Math.max(...slots.map(s=>members.filter(m=>S.effectiveLevel(s.peak,m.profile)>=2).length));
+  const exposure=Math.max(...slots.map(s=>s.exposure)),objective=[worst,count,exposure,slots[0].exposure,i];
+  if(lex(objective,score)){score=objective;best={slot:slots[0],worst,count,exposure,levels,scenarioCount:slots.length};}
+ }
+ return best;
+}
+
+return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText,analyze,evaluateSchedule,robustPlan,certificate,verifyCertificate,conflict,indoor,travel,familyFairness};
 });

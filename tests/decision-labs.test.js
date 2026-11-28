@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),I=require('../frontend/js/intelligence'),S=require('../frontend/js/core');
+const hours=Array.from({length:24},(_,i)=>({time:'2026-11-28T'+String(i).padStart(2,'0')+':00',aqi:i===3?200:50,pm2_5:i===3?100:20}));
+const constant=hours.map(x=>({...x,pm2_5:20})),input={volume:45,ach:0.5,penetration:1,deposition:0,initial:20,sourceMg:0,cadr:200},near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8);
+const r=I.indoor(constant,input,S);near(r.baseline.mean,20);near(r.baseline.end,20);assert.ok(r.filtered.mean<r.baseline.mean);assert.ok(r.stress.mean>r.filtered.mean);assert.equal(r.filtered.rows.length,6);
+near(I.indoor(constant,{...input,cadr:0},S).filtered.mean,20);
+assert.ok(I.indoor(constant,{...input,sourceMg:5},S).baseline.mean>20);
+assert.equal(I.indoor(hours.slice(0,5),input,S),null);assert.equal(I.indoor(hours,{...input,volume:0},S),null);assert.equal(I.indoor(hours.map((h,i)=>i===4?{...h,time:hours[3].time}:h),input,S),null);
+const opts=[{mode:'Car',km:5,minutes:30,factor:100},{mode:'Bus',km:5,minutes:90,factor:40}],t=I.travel(constant,opts,S);near(t.rows[0].kg,0.5);near(t.rows[1].kg,0.2);near(t.rows[0].ambient,10);near(t.rows[1].ambient,30);assert.equal(t.dominant,null);
+assert.equal(I.travel(constant,[opts[0],{...opts[1],minutes:20}],S).dominant,1);
+assert.equal(I.travel(constant,[opts[0],{...opts[1],factor:NaN}],S),null);assert.equal(I.travel(constant.slice(0,1),opts,S),null);
+const m=[{name:'General',profile:'general'},{name:'Child',profile:'child'}],f=I.familyFairness(hours,m,S);assert.ok(f);assert.equal(f.scenarioCount,4);assert.equal(f.levels.length,2);assert.equal(f.slot.index,0);assert.equal(I.familyFairness(hours,[],S),null);assert.equal(I.familyFairness([],m,S),null);
+console.log('Decision labs: analytic steady state, filtration monotonicity, indoor source, missing inputs, transport trade-offs and robust family window passed');

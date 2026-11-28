@@ -40,7 +40,7 @@ async function load(p) {
   if(!sameCity)clearReview();
   const seq = ++loadSequence;historyReading=null;historyRequest=null;$('refreshair').disabled=true;$('refreshair').querySelector('span').textContent='Refreshing…';
   if (!st.place || st.place.lat !== p.lat || st.place.lon !== p.lon) { st.hist = []; lastLvl = null; }
-  st.ctx = null; st.data = null; latestStation=null; renderTrust(); renderReview(); renderRail(null,[],null); invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
+  st.ctx = null; st.data = null; latestStation=null; resetLabs(); renderTrust(); renderReview(); renderRail(null,[],null); invalidatePlan(); $('optimizeday').disabled=true; $('planout').textContent='Waiting for the new city forecast.'; $('dayresult').textContent = 'Refresh the plan after the forecast loads.'; $('familyresults').textContent = 'Loading current air data…';
   $('gcard').hidden = false; $('gs').textContent='Monitoring station details appear when available.';
   $('aqiring').classList.add('loadingring');$('aqiring').setAttribute('aria-label','Air quality loading');$('aqiring').style.setProperty('--p',0);$('aqivalue').textContent='—';renderScale(null,false);$('stripnote').textContent='Loading forecast…';$('aqimeta').textContent='Retrieving model data';$('aqiverdict').textContent='Checking the air';$('aqilead').textContent='Loading current air data…';$('aqichips').innerHTML='<span class="chip2">Modelled data · Open-Meteo</span>';$('goplan').disabled=true;$('share').disabled=true;
   $('adv').textContent='Loading current guidance…';$('alert').textContent='';$('pol').textContent='Loading pollutant readings…';$('strip').textContent='Loading hourly forecast…';$('win').textContent='Loading forecast…';$('chart').textContent='';$('hist').textContent='';$('histtxt').textContent='Loading history…';$('disp').textContent='';st.hrs=[];
@@ -465,6 +465,34 @@ let family=store.get('svasa_family',[]);
 if(!Array.isArray(family))family=[];
 family=family.filter(x=>x&&typeof x.name==='string'&&Object.hasOwn(S.PROFILES,x.profile)).slice(0,6);
 const forecast=()=>st.data&&!st.demo&&!st.stale?S.hourlyFrom(st.data,st.data.current.time):[];
+
+function resetLabs(){
+ $('indoorresult').textContent='Use a fresh forecast and compare scenarios.';
+ $('travelresult').textContent='Enter both factors to compare travel choices.';
+ $('familyfairness').textContent='Fresh forecast and family profiles required.';
+}
+const labNumber=id=>$(id).value.trim()===''?NaN:Number($(id).value);
+function labMetric(value,unit){return value.toFixed(1)+' '+unit;}
+$('indoorform').oninput=()=>$('indoorresult').textContent='Inputs changed. Compare scenarios again.';
+$('travelform').oninput=()=>$('travelresult').textContent='Inputs changed. Compare choices again.';
+$('indoorform').onsubmit=e=>{
+ e.preventDefault();
+ const input={volume:labNumber('roomvolume'),ach:labNumber('roomach'),initial:labNumber('roominitial'),sourceMg:labNumber('roomsource'),cadr:labNumber('roomcadr'),penetration:labNumber('roompenetration'),deposition:labNumber('roomdeposition')},r=I.indoor(forecast(),input,S),el=$('indoorresult');
+ if(!r){el.textContent='Six consecutive fresh PM2.5 forecast hours and valid inputs are required.';return;}
+ const vals=[['Without particle filter',r.baseline.mean],['With selected CADR',r.filtered.mean],['Filter + 25% outdoor PM2.5',r.stress.mean]];
+ el.innerHTML='<p class="section-kicker">SIX-HOUR SCENARIO · '+esc(st.place?.name||'')+'</p><h3>'+esc(fmtTime(r.start))+' – '+esc(fmtTime(r.end))+'</h3><div class="lab-metrics">'+vals.map(([label,n])=>'<div><small>'+esc(label)+'</small><strong>'+labMetric(n,'µg/m³')+'</strong><small>Modelled mean indoor PM2.5</small></div>').join('')+'</div><p>Selected CADR adds '+r.equivalentACH.toFixed(2)+' equivalent particle-cleaning air changes per hour, without changing outdoor ventilation.</p><div class="lab-rows">'+r.filtered.rows.map((x,i)=>'<div><span>'+esc(x.time.slice(11,16))+'</span><span>'+labMetric(r.baseline.rows[i].mean,'µg/m³')+'</span><strong>'+labMetric(x.mean,'µg/m³')+'</strong></div>').join('')+'</div><p class="foot">Rows show hour start, no filter, selected filter. Scenario assumes constant inputs and perfect mixing. The +25% stress case is illustrative, not a confidence bound.</p>';
+};
+$('travelform').onsubmit=e=>{
+ e.preventDefault();const opts=['a','b'].map(k=>({mode:$('travelmode'+k).value,km:labNumber('travelkm'+k),minutes:labNumber('travelmin'+k),factor:labNumber('travelfactor'+k)})),r=I.travel(forecast(),opts,S),el=$('travelresult');
+ if(!r){el.textContent='Valid input factors and enough consecutive fresh forecast hours are required.';return;}
+ el.innerHTML='<p class="section-kicker">TRAVEL TRADE-OFF · '+esc(st.place?.name||'')+'</p><h3>Departure '+esc(fmtTime(r.start))+'</h3><div class="lab-metrics travel-metrics">'+r.rows.map((x,i)=>'<div><small>Option '+(i?'B':'A')+' · '+esc(x.mode)+'</small><strong>'+x.kg.toFixed(3)+' kg CO₂e</strong><span>'+labMetric(x.ambient,'µg·h/m³')+' ambient proxy</span><small>'+x.minutes+' min · '+x.km+' km</small></div>').join('')+'</div><p>'+ (r.dominant===null?'Trade-off: neither choice is strictly better on all three metrics.':'Option '+(r.dominant?'B':'A')+' is no worse on all three metrics and better on at least one.')+'</p><p class="foot">Based on your factors and durations. No route-specific exposure or health outcome is inferred.</p>';
+};
+function renderFamilyFairness(){
+ const el=$('familyfairness'),r=I.familyFairness(forecast(),family,S,2);
+ if(!r){el.textContent=family.length?'Two consecutive fresh forecast hours required for resilience planning.':'Add family profiles to compare a resilient shared window.';return;}
+ el.innerHTML='<p class="section-kicker">FAMILY FAIRNESS / FORECAST RESILIENCE</p><h3>'+esc(fmtTime(r.slot.start))+' – '+esc(fmtTime(r.slot.end))+'</h3><p>Worst tested scenario: '+r.count+' of '+r.levels.length+' profiles require caution · '+labMetric(r.exposure,'µg·h/m³')+' outdoor proxy.</p><div class="lab-rows">'+r.levels.map(x=>'<div><strong>'+esc(x.name)+'</strong><span>Nominal: '+(x.nominal>=2?'Caution':'Lower caution')+'</span><span>Worst: '+(x.worst>=2?'Caution':'Lower caution')+'</span></div>').join('')+'</div><p class="foot">Prioritizes the highest profile caution level across four illustrative scenarios, then number requiring caution and pollution. Shared two-hour activity only; not separate calendars or a safety guarantee.</p>';
+}
+
 function invalidatePlan(){currentPlan=null;decisionPlans=null;$('saveplan').disabled=true;$('decisionchoices').hidden=true;$('parallelfutures').hidden=true;$('resilience').hidden=true;$('constraintconflict').hidden=true;$('decisionproof').hidden=true;$('proofstatus').textContent='';}
 function renderActivityTimes(){
   invalidatePlan();
@@ -520,7 +548,7 @@ function renderResilience(proof,analysis){
  $('exportproof').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(proof,null,2)],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download='svasa-decision-certificate.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 }
 function renderFamily(){
-  renderFamilyWindow();
+  renderFamilyWindow();renderFamilyFairness();
   const box=$('familyresults'), live=st.data&&!st.demo&&!st.stale;
   box.innerHTML=family.length?family.map((x,i)=>'<article class="familymember"><p class="section-kicker">'+esc(S.PROFILES[x.profile].name)+'</p><h3>'+esc(x.name)+'</h3><p>'+esc(live?S.advice(st.data.current.us_aqi,x.profile).go:'Fresh data required for current advice.')+'</p><button type="button" class="btn ghost sm" data-family-use="'+i+'">Use profile</button> <button type="button" class="btn ghost sm" data-family-remove="'+i+'">Remove</button></article>').join(''):'<p class="muted">Add a profile to see personalized guidance here.</p>';
 }

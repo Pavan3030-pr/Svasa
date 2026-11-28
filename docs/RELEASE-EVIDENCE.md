@@ -33,3 +33,7 @@ Added explicit verified mode for six allowlisted questions in all five languages
 ## Landing performance consistency
 
 Local audit 46030140328 scored 84/100 on one mobile landing sample, with total blocking time 614.5 ms and benchmark index 2113 (other mobile landing traces: 100/100, 0 ms blocking, benchmark indices 2518.5 and 2525.5). Long tasks include browser-unattributed work, document rendering and landing script work; runner contention is plausible, not proven. Landing preview network and visual commits are separated by idle scheduling, and the below-fold ticker is no longer mutated by the hero update. Removed eager upstream preconnect. All existing live values, viewport activation, error states and quality thresholds are preserved. New audits must pass before claiming consistency.
+
+## Indoor, sustainable travel and family fairness
+
+New decision labs add an analytic room mass-balance model, user-factor transport comparison, and robust shared family window. Deterministic tests check steady state, filtration and source monotonicity, missing data, emissions arithmetic, partial-hour integration, Pareto trade-offs and family constraints. Browser tests exercise input edits, computed output, mobile overflow and accessibility. None of these tests substitutes for indoor measurements, calibrated local transport factors, independent clinical validation or consenting participants. Release verification must complete before declaring these checks passed.
