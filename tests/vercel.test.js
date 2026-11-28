@@ -22,4 +22,6 @@ const call=(o)=>new Promise(r=>{const res={headers:{},setHeader(k,v){this.header
  assert.match(fallback(ground,'What is polluting the air?').recommendation,/PM2.5/);
  const localized=[['hi','क्या मुझे मास्क चाहिए?','क्या खिड़कियाँ खोलूँ?'],['te','నాకు మాస్క్ అవసరమా?','కిటికీలు తెరవాలా?'],['ta','எனக்கு முகக்கவசம் தேவையா?','ஜன்னல்களைத் திறக்கலாமா?'],['bn','আমার কি মাস্ক দরকার?','জানালা খুলব?']];
  for(const [lang,mask,windows] of localized){const one=fallback({...ground,lang},mask),two=fallback({...ground,lang},windows);assert.match(one.recommendation,/N95/);assert.notEqual(one.recommendation,two.recommendation);assert.equal(fallback.intent(windows),'windows');}
+ for(const q of ['Write a poem','Can I double my inhaler dose?','Who won the election?']){assert.equal(fallback.intent(q),'unsupported');assert.match(fallback(ground,q).recommendation,/cannot reliably answer/);}
+ for(const q of ['Can I walk?','बाहर टहलने के लिए क्या सावधानी रखूँ?','బయట నడవడానికి ఎలాంటి జాగ్రత్తలు తీసుకోవాలి?','வெளியே நடக்க என்ன முன்னெச்சரிக்கை தேவை?','বাইরে হাঁটার জন্য কী সতর্কতা নেব?'])assert.equal(fallback.intent(q),'general');
  console.log('vercel function tests passed');process.exit(0)})();

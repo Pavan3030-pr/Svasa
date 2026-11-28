@@ -17,3 +17,7 @@ Run npm test for deterministic regression cases, including 100 contract and mult
 ## Remaining infrastructure
 
 Shared Redis rate limiting is optional and needs server-side environment variables. Optional daily background push is implemented but requires Redis and opted-in subscriptions. In-app alerts remain available independently. Official CPCB AQI is not claimed: the displayed Indian-scale value is a partial atmospheric model estimate.
+
+## Answer correctness hardening
+
+Provider fallback now distinguishes recognized air-quality guidance from unsupported requests (including dosage and diagnosis), explicitly stating the limitation in each of the five supported languages. Response validation checks common localized AQI labels, decimal and number-before-AQI claims, current-versus-window AQI, PM2.5 claims even without units, and nonempty off-topic payloads. These checks are deliberately bounded, not comprehensive semantic or clinical validation. A provider quota failure remains an external blocker to live-model verification; never label fallback as Gemini.

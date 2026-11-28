@@ -65,9 +65,16 @@ function verifyText(value,ctx,S){
  const t=digits([value.recommendation,value.reason,value.limitation].join('\n')),recommendation=digits(value.recommendation||'');
  if(/(?:पूरी तरह सुरक्षित|बिल्कुल सुरक्षित|कोई जोखिम नहीं|పూర్తిగా సురక్షితం|ఎలాంటి ప్రమాదం లేదు|முற்றிலும் பாதுகாப்பானது|எந்த ஆபத்தும் இல்லை|সম্পূর্ণ নিরাপদ|কোনো ঝুঁকি নেই)/u.test(t))return false;
  const allowedAQI=new Set([Math.round(ctx.aqi),ctx.window?.avg].filter(Number.isFinite));
- for(const m of t.matchAll(/\bAQI\s*(?:is\s*|[:=]\s*)?(\d{1,4})\b/gi))if(!allowedAQI.has(Number(m[1])))return false;
+ const numeric='(\\d+(?:\\.\\d+)?)';
+ // Check common native-language labels as well as the English abbreviation.
+ const aqiLabel='(?:\\bAQI\\b|वायु गुणवत्ता सूचकांक|वायु गुणवत्ता सूचक|గాలి నాణ్యత సూచిక|వాయు నాణ్యత సూచిక|காற்றுத் தரக் குறியீடு|বায়ুর মান সূচক|বায়ুর গুণমান সূচক)';
+ for(const m of t.matchAll(new RegExp(aqiLabel+'\\s*(?:is\\s*|of\\s*|[:=]\\s*)?'+numeric,'giu')))if(!allowedAQI.has(Number(m[1])))return false;
+ for(const m of t.matchAll(new RegExp(numeric+'\\s*(?:US\\s+)?AQI\\b','gi')))if(!allowedAQI.has(Number(m[1])))return false;
+ // Current claims cannot borrow the lower forecast-window mean.
+ for(const m of t.matchAll(/(?:current|now|currently)\s+(?:modelled\s+)?(?:US\s+)?AQI\s*(?:is\s*|[:=]\s*)?(\d+(?:\.\d+)?)/gi))if(Number(m[1])!==Math.round(ctx.aqi))return false;
  if(/\b(?:guaranteed safe|zero risk|no risk|risk.free|100\s*%\s*safe)\b/i.test(t))return false;
- for(const m of t.matchAll(/\bPM\s*2\.5\s*(?:concentration\s*)?(?:is\s*|of\s*|[:=]\s*)?(\d+(?:\.\d+)?)\s*(?:µg|μg|ug|micrograms?)/gi))if(!valid(ctx.pm25)||Math.abs(Number(m[1])-ctx.pm25)>.51)return false;
+ if(/\b(?:stop (?:taking|using) (?:your|the)|double (?:your|the) dose|take \d+\s*(?:mg|tablets?))\b/i.test(recommendation))return false;
+ for(const m of t.matchAll(/\bPM\s*2\.5\s*(?:concentration\s*)?(?:is\s*|of\s*|[:=]\s*)?(\d+(?:\.\d+)?)/gi))if(!valid(ctx.pm25)||Math.abs(Number(m[1])-ctx.pm25)>.51)return false;
  const permitted=new Set([ctx.window?.start?.slice(11,16),ctx.window?.end?.slice(11,16)].filter(Boolean));
  for(const m of t.matchAll(/\b(?:[01]\d|2[0-3]):[0-5]\d\b/g))if(!permitted.has(m[0]))return false;
  if(S.effectiveLevel(ctx.aqi,ctx.profile)>=2&&/(?:^|[.!?]\s+)(?:go (?:for a )?|do |try |continue )?(?:run(?:ning)?|jog(?:ging)?|strenuous exercise|intense exercise) (?:outdoors|outside)\b/i.test(recommendation))return false;
