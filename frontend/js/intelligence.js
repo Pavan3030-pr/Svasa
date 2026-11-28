@@ -27,6 +27,22 @@ function trust({fresh,model,station,hours}){
  const absolute=Math.abs(model-station.pm25),relative=absolute/Math.max(model,station.pm25,1),disagreement=absolute>=15&&relative>=0.4;
  return {...base,station:station.pm25,difference:absolute,state:disagreement?'disagreement':'comparison',label:disagreement?'Material source disagreement':'Ground comparison available',detail:(disagreement?'Review local conditions before relying on the model. ':'Readings are available for comparison, not independent validation. ')+'Station and model locations and averaging periods can differ. The flag is a heuristic (≥15 µg/m³ and ≥40% of the larger reading), not a confidence probability.'};
 }
+// Evidence-aware guidance is deliberately separate from forecast optimisation.
+// A nearby point measurement cannot calibrate a whole city's future forecast.
+function decisionEvidence({fresh,data,station,hours,now=Date.now()}){
+ const model=data?.current?.pm2_5,base=trust({fresh,model,station,hours});
+ if(!fresh||!valid(model)||!station||!valid(station.pm25))return {...base,offsetMinutes:null,advisory:null};
+ const offset=data?.utc_offset_seconds,modelTime=data?.current?.time;
+ const mt=iso(modelTime)&&Number.isFinite(offset)&&Math.abs(offset)<=14*3600?Date.parse(modelTime+'Z')-offset*1000:NaN;
+ const st=typeof station.time==='string'&&/(?:Z|[+-]\d\d:\d\d)$/i.test(station.time)?Date.parse(station.time):NaN;
+ const stationAge=(now-st)/3600000,modelAge=(now-mt)/3600000;
+ const checked=trust({fresh,model,station:{...station,ageHours:stationAge},hours});
+ if(checked.state==='stale-station'||checked.state==='model-only')return {...checked,offsetMinutes:null,advisory:null};
+ if(!Number.isFinite(mt)||!Number.isFinite(modelAge)||modelAge>3||modelAge< -1||!Number.isFinite(st)||Math.abs(mt-st)>3600000)
+  return {...checked,state:'time-mismatch',label:'Readings are not time-aligned',station:null,difference:null,offsetMinutes:Number.isFinite(mt)&&Number.isFinite(st)?Math.round(Math.abs(mt-st)/60000):null,detail:'Model and station readings must be within one hour for this indicative comparison. Their averaging intervals may still differ.',advisory:'The station and model readings cannot be compared at the same time. Use the forecast as an estimate and check local conditions before outdoor activity.'};
+ const offsetMinutes=Math.round(Math.abs(mt-st)/60000);
+ return {...checked,offsetMinutes,advisory:checked.state==='disagreement'?'Model and nearby station PM2.5 differ materially. Consider a shorter or indoor alternative for optional outdoor activity, especially for sensitive people. Review forecast resilience; this is not a correction to the forecast or a safety guarantee.':null};
+}
 function capture(items,plan,hours,cityKey,profile,policy){
  if(!plan||!Array.isArray(items)||!Array.isArray(hours)||!items.every(x=>hours[x.preferred]&&iso(hours[x.preferred].time)))return null;
  return {cityKey,profile,policy,items:items.map((a,i)=>({name:a.name,duration:a.duration,flex:a.flex,preferredTime:hours[a.preferred].time,chosenTime:plan.slots[i].start})),exposure:plan.exposure,risk:plan.risk};
@@ -210,5 +226,5 @@ function familyFairness(hours,members,S,duration=2){
  return best;
 }
 
-return {slot,compare,trust,capture,restore,revise,familyWindow,ledger,verifyText,analyze,evaluateSchedule,robustPlan,certificate,verifyCertificate,conflict,indoor,travel,familyFairness};
+return {slot,compare,trust,decisionEvidence,capture,restore,revise,familyWindow,ledger,verifyText,analyze,evaluateSchedule,robustPlan,certificate,verifyCertificate,conflict,indoor,travel,familyFairness};
 });

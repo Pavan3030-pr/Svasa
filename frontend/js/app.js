@@ -216,10 +216,10 @@ function drawStation(s) {
   latestStation=s;renderTrust();
   const gc = $('gcard'), c = st.data.current; gc.hidden = false;
   if (!s || !Number.isFinite(s.pm25) || s.pm25<0) { $('gs').innerHTML = '<p class="muted" style="margin:0">No monitoring station reporting PM2.5 within 25 km. Showing the model estimate only.</p>'; return; }
-  const model = c.pm2_5, diff = s.pm25 > 0 && typeof model === 'number' ? Math.round((model - s.pm25) / s.pm25 * 100) : null;
+  const model = c.pm2_5, evidence=currentEvidence(),diff = evidence.station!==null&&s.pm25 > 0 && Number.isFinite(model) ? Math.round((model - s.pm25) / s.pm25 * 100) : null;
   const age = s.ageHours == null ? '' : s.ageHours < 1 ? 'less than an hour ago' : Math.round(s.ageHours) + ' h ago';
   const fresh=s.ageHours!=null&&s.ageHours<=3;
-  const v=!fresh?'Station reading is stale or its time is unknown; no comparison made.':diff===null?'Comparison unavailable.':`Model concentration is ${Math.abs(diff)}% ${diff>=0?'higher':'lower'} than the latest station reading. Locations and averaging periods may differ.`;
+  const v=!fresh?'Station reading is stale or its time is unknown; no comparison made.':diff===null?'Comparison unavailable: '+evidence.label+'.':`Model concentration is ${Math.abs(diff)}% ${diff>=0?'higher':'lower'} than the latest station reading. Locations and averaging periods may differ.`;
   const b=null;
   $('gs').innerHTML = `<p class="lead" style="margin:0"><b>${esc(s.name)}</b> · ${Number.isFinite(s.distanceKm)?s.distanceKm+' km away':'distance unavailable'}${age ? ' · measured ' + esc(age) : ''}</p>
     <div class="drv"><div><small>Station PM2.5</small><b>${s.pm25.toFixed(1)} µg/m³</b></div><div><small>Model PM2.5</small><b>${typeof model === 'number' ? model.toFixed(1) + ' µg/m³' : 'n/a'}</b></div><div><small>Station freshness</small><b>${fresh?'Recent':'Stale / unknown'}</b></div></div>
@@ -431,9 +431,15 @@ function forgetReview(){if(!store.set(reviewKey,null)){banner('Could not remove 
 const cityKey=()=>st.place?st.place.lat+','+st.place.lon:'';
 const metric=v=>Number.isFinite(v)?v.toFixed(1)+' µg·h/m³':'Unavailable';
 const fmtTime=t=>t?t.replace('T',' '):'Unavailable';
+function currentEvidence(){return I.decisionEvidence({fresh:!!st.data&&!st.demo&&!st.stale,data:st.data,station:latestStation,hours:forecast()});}
 function renderTrust(){
- const el=$('airtrust'),r=I.trust({fresh:!!st.data&&!st.demo&&!st.stale,model:st.data?.current?.pm2_5,station:latestStation,hours:forecast()});
- el.innerHTML='<p class="section-kicker">AIRTRUST / EVIDENCE QUALITY</p><h3>'+esc(r.label)+'</h3><div class="decisionbaseline"><div><small>Usable forecast hours</small><strong>'+r.coverage+' / 24</strong></div><div><small>Model PM2.5</small><strong>'+esc(r.model===null?'Unavailable':r.model.toFixed(1)+' µg/m³')+'</strong></div><div><small>Comparable station PM2.5</small><strong>'+esc(r.station===null?'Unavailable':r.station.toFixed(1)+' µg/m³')+'</strong></div></div><p class="muted trust-detail">'+esc(r.detail)+'</p>';
+ const el=$('airtrust'),r=currentEvidence();
+ for(const id of ['plan-evidence-advisory','family-evidence-advisory','ask-evidence-advisory']){const note=$(id);note.hidden=!r.advisory;note.textContent=r.advisory||'';}
+ const c=st.data?.current,win=st.ctx?.window,live=!!c&&!st.demo&&!st.stale;
+ $('railwindowadvice').textContent=r.advisory||(live&&win?(S.effectiveLevel(win.peak,st.profile)>=2?'Even this window needs caution; consider an indoor alternative.':'Lower forecast pollution does not mean risk-free.'):'Forecast estimates may change.');
+ if(live)$('aqilead').textContent=r.advisory?'Model-based guidance: '+S.advice(c.us_aqi,st.profile).go+' Check the ground-reading advisory before deciding.':S.advice(c.us_aqi,st.profile).go;
+ if(currentPlan)currentPlan.evidenceAtReview={state:r.state,offsetMinutes:r.offsetMinutes,modelPm25:r.model,stationPm25:r.station,advisory:r.advisory};
+ el.innerHTML='<p class="section-kicker">AIRTRUST / EVIDENCE QUALITY</p><h3>'+esc(r.label)+'</h3><div class="decisionbaseline"><div><small>Usable forecast hours</small><strong>'+r.coverage+' / 24</strong></div><div><small>Model PM2.5</small><strong>'+esc(r.model===null?'Unavailable':r.model.toFixed(1)+' µg/m³')+'</strong></div><div><small>Comparable station PM2.5</small><strong>'+esc(r.station===null?'Unavailable':r.station.toFixed(1)+' µg/m³')+'</strong></div></div><p class="muted trust-detail">'+esc(r.detail+(r.offsetMinutes===null?'':' Reading times differ by '+r.offsetMinutes+' minutes.'))+'</p>'+(r.advisory?'<p class="healthadvisory">'+esc(r.advisory)+'</p>':'');
 }
 function futureMeters(r){
  if(!Number.isFinite(r.baseline)||!Number.isFinite(r.optimized))return '<p class="muted">The preferred schedule overlaps or contains missing data, so a comparison is unavailable.</p>';
@@ -539,7 +545,7 @@ function chooseDecision(policy){
   for(const k of ['exposure','routine','robust'])$('decision'+k).setAttribute('aria-pressed',String(policy===k));
   reviewSnapshot=I.capture(items,plan,forecast(),cityKey(),st.profile,policy);$('adaptiveday').hidden=true;
   renderFutures(items,plan);const proof=I.certificate(forecast(),items,plan,S,st.profile,decisionPlans.analysis);renderResilience(proof,decisionPlans.analysis);
-  currentPlan={createdAt:new Date().toISOString(),completed:false,city:st.place.name,profile:st.profile,policy,decisionCertificate:proof,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};$('saveplan').disabled=false;
+  currentPlan={createdAt:new Date().toISOString(),completed:false,city:st.place.name,profile:st.profile,policy,decisionCertificate:proof,shift:plan.shift,risk:plan.risk,exposure:plan.exposure,baseline:plan.baseline,baselineRisk:plan.baselineRisk,changePct:plan.changePct,slots:plan.slots.map((x,i)=>({...x,activity:items[i].name,preferredStart:forecast()[items[i].preferred]?.time||null,fixed:items[i].flex===0})),source:'Open-Meteo / CAMS forecast',forecastTime:st.data.current.time};const ev=currentEvidence();currentPlan.evidenceAtReview={state:ev.state,offsetMinutes:ev.offsetMinutes,modelPm25:ev.model,stationPm25:ev.station,advisory:ev.advisory};$('saveplan').disabled=false;
   const change=plan.changePct==null?'Original schedule unavailable or overlapping.':plan.changePct===0?'No change in concentration-time proxy.':(plan.changePct>0?plan.changePct+'% lower':Math.abs(plan.changePct)+'% higher')+' concentration-time proxy versus preferred schedule.';
   const moved=plan.slots.map((x,i)=>{const delta=x.index-items[i].preferred;return '<div class="scheduleitem"><strong>'+esc(items[i].name)+'</strong><span>'+esc(x.start.replace('T',' '))+' – '+esc(x.end.replace('T',' '))+'</span><small>'+ (items[i].flex===0?'Fixed commitment · ':delta===0?'Unchanged · ':Math.abs(delta)+'h '+(delta<0?'earlier':'later')+' · ')+'Peak AQI '+Math.round(x.peak)+' · '+(x.caution?'Consider indoor alternative':'Lower concern, not risk-free')+'</small></div>';}).join('');
   const baseline=plan.baseline===null?'Preferred schedule unavailable':plan.baseline.toFixed(1)+' µg·h/m³';

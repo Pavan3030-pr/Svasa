@@ -13,6 +13,13 @@ assert.equal(I.trust({...ev,station:{pm25:75,ageHours:1,distanceKm:5}}).state,'c
 assert.equal(I.trust({...ev,station:{pm25:20,ageHours:4,distanceKm:5}}).state,'stale-station');
 assert.equal(I.trust({...ev,station:{pm25:20,ageHours:-1,distanceKm:5}}).state,'stale-station');
 assert.equal(I.trust({...ev,station:{pm25:20,ageHours:1,distanceKm:50}}).state,'model-only');
+const modelTime='2026-11-27T11:00',now=Date.parse('2026-11-27T11:15Z'),data={current:{time:modelTime,pm2_5:80},utc_offset_seconds:0},station={pm25:20,distanceKm:5,ageHours:0.25,time:'2026-11-27T11:00:00Z'};
+const evidence=I.decisionEvidence({fresh:true,data,station,hours:hrs,now});assert.equal(evidence.state,'disagreement');assert.match(evidence.advisory,/shorter or indoor/);assert.equal(evidence.offsetMinutes,0);
+assert.equal(I.decisionEvidence({fresh:true,data,station:{...station,pm25:75},hours:hrs,now}).advisory,null);
+assert.equal(I.decisionEvidence({fresh:true,data,station:{...station,time:'2026-11-27T09:30:00Z'},hours:hrs,now}).state,'time-mismatch');
+assert.equal(I.decisionEvidence({fresh:true,data,station:{...station,time:'2026-11-27T07:00:00Z'},hours:hrs,now}).state,'stale-station');
+assert.equal(I.decisionEvidence({fresh:true,data:{...data,current:{time:'2026-11-27T16:30',pm2_5:80},utc_offset_seconds:19800},station,hours:hrs,now}).offsetMinutes,0);
+assert.equal(I.decisionEvidence({fresh:false,data,station,hours:hrs,now}).advisory,null);
 const snap=I.capture(items,plan,hrs,'x','general','exposure');assert.equal(I.revise(snap,hrs,S,'x','general').state,'unchanged');assert.equal(I.revise(snap,hrs.slice(1),S,'x','general').state,'expired');assert.equal(I.revise(snap,[],S,'x','general').state,'unavailable');assert.equal(I.revise(snap,hrs,S,'y','general').state,'different-context');
 const newH=hrs.map((h,i)=>i===2?{...h,pm2_5:70,aqi:150}:h);const revision=I.revise(snap,newH,S,'x','general');assert.equal(revision.state,'changed');assert.equal(revision.proposal.slots[0].start,hrs[0].time);
 assert.equal(I.familyWindow(hrs,[{name:'A',profile:'general'},{name:'B',profile:'child'}],S).slot.index,2);assert.equal(I.familyWindow(hrs,[],S),null);

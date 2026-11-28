@@ -53,3 +53,5 @@ Added model-response coordinate, UTC offset, timestamp, particle-unit and foreca
 ## Independent station observation
 
 Added actual station/model comparison workflow using three fixed public cities and the public station endpoint. It records matched concentration values, time separation, grid distance, skipped coverage and signed/absolute differences. Fixture tests reject mismatched units, stale/future readings, duplicate times and unavailable data. The first live workflow must run before reporting real values. This is not clinical validation or a calibrated forecast error estimate.
+
+The independent observation run 46101582501 matched three public cities; station versus model PM2.5 mean absolute difference was 36.17 µg/m³, with unknown station averaging intervals. Evidence-aware guidance now checks temporal alignment and carries an explicit caution across user decisions. New fixture tests exercise agreement, disagreement, stale readings, nonaligned readings and local UTC offsets. These checks do not establish calibrated forecast accuracy or clinical benefit.
