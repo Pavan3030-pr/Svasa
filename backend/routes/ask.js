@@ -19,6 +19,11 @@ module.exports = async function ask(req) {
   try {
     let ctx;
     try { ctx=await air.verifiedContext(b.place,b.ctx&&b.ctx.profile,b.ctx&&b.ctx.lang,b.ctx&&b.ctx.hist); } catch (_) { return R(503,{error:'Verified air data unavailable'}); }
+    if(b.mode==='verified'){
+      const value=require('../lib/verified-intents').answer(q,ctx);
+      if(!value)return R(400,{error:'Choose a supported verified question'});
+      return R(200,{sections:value,answer:[value.recommendation,value.reason,value.limitation].join('\n'),source:'verified',evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window}});
+    }
     const r = await gemini.generate(q, ctx);
     if(r.reason){const value=require('../lib/quota-guidance')(ctx,q,r.reason);return R(200,{sections:value,answer:[value.recommendation,value.reason,value.limitation].join('\n'),source:'rules',reason:r.reason,evidence:{aqi:ctx.aqi,pm25:ctx.pm25,observedAt:ctx.observedAt,source:ctx.source,timezone:'UTC',window:ctx.window}});}
     if (r.error) return R(r.status, { error: r.error });

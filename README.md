@@ -9,7 +9,7 @@ SVASA turns air-quality forecasts into practical, constraint-aware outdoor decis
 ## Application gallery
 
 <!-- SVASA_GALLERY_START -->
-Actual application UI captured by automated Chromium on commit 717435f. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46019444969).
+Actual application UI captured by automated Chromium on commit cffcf85. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46029460014).
 
 ### Landing experience
 ![SVASA landing page](docs/screenshots/current/landing-desktop.png)
@@ -21,6 +21,13 @@ Actual application UI captured by automated Chromium on commit 717435f. **Contro
 ![Personal air decision workspace](docs/screenshots/current/planner-desktop.png)
 
 ![Side-by-side original and optimized exposure projections](docs/screenshots/current/parallel-futures.png)
+
+### Forecast resilience and decision proof
+![Four deterministic forecast stress scenarios](docs/screenshots/current/forecast-resilience.png)
+
+| Decision certificate | Constraint resolution |
+|:---:|:---:|
+| ![Recomputed optimality certificate](docs/screenshots/current/decision-certificate.png) | ![Explicit conflict resolution](docs/screenshots/current/constraint-resolution.png) |
 
 | Adaptive Day | AirTrust |
 |:---:|:---:|

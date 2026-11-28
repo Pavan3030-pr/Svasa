@@ -23,3 +23,7 @@ The notification settings panel now provides a local self-reported delivery rece
 ### Aggregate results without personal information
 
 Ask each consenting participant to clear previous feedback on their own device, complete the tasks, save exactly one response and voluntarily export it. Keep the exports outside the public repository. Run `node scripts/usability-summary.js path/to/participant-*.json` to produce anonymous counts and mean ease rating. The script rejects multiple responses in one file, duplicate file paths and unexpected response fields. It cannot establish whether different files actually represent different people; the study organizer must establish that independently. An empty study produces no average and does not meet the five-person minimum.
+
+### Assistant comprehension task
+
+Ask each participant to select a quick question and then type a different air-quality question. Have them identify which response used fixed rules and which used Gemini or fallback. Ask whether the limitation and observation time were understood. Record the actual outcome, not an inferred completion. Share only anonymous outcomes with the organizer. No recruitment or independent participant response has been completed by automated tests.

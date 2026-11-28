@@ -33,10 +33,12 @@ const unsupportedText={
  bn:'উপলব্ধ নিয়মভিত্তিক বায়ুর মান নির্দেশনা দিয়ে এই প্রশ্নের নির্ভরযোগ্য উত্তর দিতে পারছি না। বাইরের কাজ, মাস্ক, জানালা, শিশু বা পূর্বাভাস সম্পর্কে জিজ্ঞেস করুন। চিকিৎসার সিদ্ধান্তে চিকিৎসকের পরামর্শ নিন।'
 };
 const unavailableText={en:'AI is unavailable or its response could not be verified. This is limited rule-based guidance, not medical advice.',hi:'एआई उपलब्ध नहीं है या उत्तर सत्यापित नहीं हो सका। यह सीमित नियम आधारित मार्गदर्शन है, चिकित्सा सलाह नहीं।',te:'ఏఐ అందుబాటులో లేదు లేదా జవాబును ధృవీకరించలేకపోయాము. ఇది పరిమిత నియమ ఆధారిత సూచన, వైద్య సలహా కాదు.',ta:'ஏஐ கிடைக்கவில்லை அல்லது பதிலைச் சரிபார்க்க முடியவில்லை. இது வரையறுக்கப்பட்ட விதி சார்ந்த வழிகாட்டுதல், மருத்துவ ஆலோசனை அல்ல.',bn:'এআই উপলব্ধ নয় বা উত্তর যাচাই করা যায়নি। এটি সীমিত নিয়মভিত্তিক নির্দেশনা, চিকিৎসা পরামর্শ নয়।'};
-module.exports=(ctx,question,failure='provider_rate_limit')=>{
- const lang=Object.hasOwn(messages,ctx.lang)?ctx.lang:'en',m=messages[lang],topic=intent(question),high=S.effectiveLevel(ctx.aqi,ctx.profile)>=2,childHigh=S.effectiveLevel(ctx.aqi,'child')>=2;
+module.exports=(ctx,question,failure='provider_rate_limit',forcedTopic)=>{
+ const lang=Object.hasOwn(messages,ctx.lang)?ctx.lang:'en',m=messages[lang],topic=forcedTopic||intent(question),high=S.effectiveLevel(ctx.aqi,ctx.profile)>=2,childHigh=S.effectiveLevel(ctx.aqi,'child')>=2;
  const dom=Object.hasOwn(S.POLLUTANTS,ctx.dominant)?S.POLLUTANTS[ctx.dominant].name:null;
- let recommendation=m[high?1:0],reason=m[2]+Math.round(ctx.aqi)+' (US AQI).';
+ const activity={hi:['यदि आप स्वस्थ महसूस करते हैं तो सामान्य गतिविधि उचित हो सकती है; स्थानीय स्थिति देखें।','बाहर का समय कम करें; कठिन व्यायाम अंदर करें।','जरूरी कामों तक बाहर जाना सीमित करें।'],te:['మీకు ఆరోగ్యం బాగుంటే సాధారణ కార్యకలాపాలు చేయవచ్చు; స్థానిక పరిస్థితులను గమనించండి.','బయట సమయాన్ని తగ్గించి తీవ్రమైన వ్యాయామాన్ని ఇంట్లో చేయండి.','అవసరమైన పనులకు మాత్రమే బయటకు వెళ్లండి.'],ta:['உடல்நிலை நன்றாக இருந்தால் வழக்கமான செயல்கள் பொருத்தமாக இருக்கலாம்; உள்ளூர் சூழலைக் கவனியுங்கள்.','வெளியே செலவிடும் நேரத்தைக் குறைத்து தீவிர உடற்பயிற்சியை உள்ளே செய்யுங்கள்.','அத்தியாவசிய வேலைகளுக்கு மட்டும் வெளியே செல்லுங்கள்.'],bn:['শরীর ভালো থাকলে স্বাভাবিক কাজ করা যেতে পারে; স্থানীয় পরিস্থিতি খেয়াল করুন।','বাইরে সময় কমান এবং কঠোর ব্যায়াম ঘরের ভিতরে করুন।','শুধু প্রয়োজনীয় কাজে বাইরে যাওয়া সীমিত রাখুন।']};
+ const level=S.effectiveLevel(ctx.aqi,ctx.profile);
+ let recommendation=lang==='en'?S.advice(ctx.aqi,ctx.profile).go:activity[lang][level>=3?2:level>=2?1:0],reason=m[2]+Math.round(ctx.aqi)+' (US AQI).';
  if(topic==='general'&&lang==='en')recommendation=S.advice(ctx.aqi,ctx.profile).go;
  if(lang==='en'){
    const a=S.advice(ctx.aqi,ctx.profile);
@@ -57,6 +59,7 @@ module.exports=(ctx,question,failure='provider_rate_limit')=>{
  if(lang!=='en'&&topic==='windows'){
  const caveat={hi:'सुरक्षित तापमान और वेंटिलेशन बनाए रखें।',te:'సురక్షిత ఉష్ణోగ్రత, గాలి ప్రసరణ ఉండేలా చూసుకోండి.',ta:'பாதுகாப்பான வெப்பநிலையையும் காற்றோட்டத்தையும் பராமரிக்கவும்.',bn:'নিরাপদ তাপমাত্রা ও বায়ুচলাচল বজায় রাখুন।'};recommendation+=' '+caveat[lang];
  }
- return {kind:'air',recommendation,reason,limitation:failure==='provider_rate_limit'?m[3]:unavailableText[lang]};
+ const verifiedText={en:'Verified model-data guidance using fixed rules, not a medical diagnosis. Local and indoor conditions may differ.',hi:'सत्यापित मॉडल डेटा पर आधारित निश्चित नियमों का मार्गदर्शन है, चिकित्सा निदान नहीं। स्थानीय और अंदर की स्थितियाँ अलग हो सकती हैं।',te:'ధృవీకరించిన నమూనా డేటా ఆధారంగా నియమాల సూచన మాత్రమే, వైద్య నిర్ధారణ కాదు. స్థానిక మరియు ఇంటి లోపలి పరిస్థితులు భిన్నంగా ఉండవచ్చు.',ta:'சரிபார்க்கப்பட்ட மாதிரித் தரவை அடிப்படையாகக் கொண்ட விதி வழிகாட்டுதல்; மருத்துவ நோயறிதல் அல்ல. உள்ளூர் மற்றும் உட்புற சூழல் மாறுபடலாம்.',bn:'যাচাই করা মডেল তথ্যের ভিত্তিতে নিয়মভিত্তিক নির্দেশনা, চিকিৎসা নির্ণয় নয়। স্থানীয় ও ঘরের ভেতরের পরিস্থিতি ভিন্ন হতে পারে।'};
+ return {kind:'air',recommendation,reason,limitation:failure==='verified_intent'?verifiedText[lang]:failure==='provider_rate_limit'?m[3]:unavailableText[lang]};
 };
 module.exports.intent=intent;
