@@ -36,6 +36,22 @@ async function check(name,fn){try{out.checks[name]=await fn();}catch(e){out.chec
   const rateLimited=results.some(x=>x.reason==='provider_rate_limit'||x.reason==='provider_budget_exhausted');
   return {result:!usable?'fail':strictLive&&!live?(rateLimited?'quota limited':'live evaluation incomplete'):'pass',providerEvaluation:live?'live verified':'incomplete due to provider availability or response validation',cases:results,scope:'Response schema, script, source and evidence; not clinical or translation-quality assessment'};
  });
+ // Release gate: exercise every language on the real production API without
+ // spending scarce generation quota. Strict live inference stays separately tested.
+ if(!strictLive)await check('verifiedMultilingualProduction',async()=>{
+  const intents=require('../backend/lib/verified-intents'),cases=[];
+  for(const [lang,,script] of languageCases){
+   for(const q of [intents.questions[lang][0],intents.factual[lang].aqi[0]+'?']){
+    const r=await post({q,mode:'verified',place:{lat:17.385,lon:78.4867},ctx:{profile:'general',lang,hist:[]}});
+    assert.equal(r.status,200,lang);assert.equal(r.data.source,'verified',lang);
+    assert.ok(['recommendation','reason','limitation'].every(k=>typeof r.data.sections?.[k]==='string'&&script.test(r.data.sections[k])),lang);
+    assert.ok(Number.isFinite(r.data.evidence?.aqi)&&Number.isFinite(Date.parse(r.data.evidence?.observedAt)),lang);
+    assert.equal(r.data.evidence.source,'Open-Meteo / CAMS model',lang);
+    cases.push({lang,source:r.data.source,result:'pass'});
+   }
+  }
+  return {result:'pass',cases,scope:'Ten real production API checks; deterministic guidance and factual reading, not live Gemini or independent clinical validation'};
+ });
  await check('productionSecurityHeaders',async()=>{
   for(const path of ['/','/app.html']){
    const r=await get(path),csp=r.headers.get('content-security-policy')||'';

@@ -29,7 +29,7 @@ async function generate(q,ctx){
  if(hit&&hit.expires>now)return hit.value;
  if(key&&pending.has(key))return pending.get(key);
  if(now<blockedUntil)return unavailable(blockedReason,blockedReason==='provider_rate_limit'?{stage:'local_cooldown',quota:blockedDiagnostic?.quota||'unknown',retryAfterSeconds:Math.ceil((blockedUntil-now)/1000)}:null);
- const request=generateLive(q,ctx).catch(()=>unavailable('provider_network')).then(result=>{if(result.reason&&result.reason!=='invalid_model_response'){blockedReason=result.reason;blockedDiagnostic=result.diagnostic||null;blockedUntil=Date.now()+(result.quotaLimited?Math.max(30,result.diagnostic?.retryAfterSeconds||30)*1000:10000);}if(key&&result.status===200&&result.value?.kind==='air'){if(memo.size>=100)memo.delete(memo.keys().next().value);memo.set(key,{value:result,expires:Date.now()+120000});}return result;});
+ const request=generateLive(q,ctx).catch(()=>unavailable('provider_network')).then(result=>{if(result.reason&&result.reason!=='invalid_model_response'){blockedReason=result.reason;blockedDiagnostic=result.diagnostic||null;blockedUntil=Date.now()+(result.quotaLimited?(result.diagnostic?.retryAfterSeconds||30)*1000:10000);}if(key&&result.status===200&&result.value?.kind==='air'){if(memo.size>=100)memo.delete(memo.keys().next().value);memo.set(key,{value:result,expires:Date.now()+120000});}return result;});
  if(key)pending.set(key,request);
  try{return await request;}finally{if(key)pending.delete(key);}
 }
@@ -42,10 +42,10 @@ async function generateLive(q,ctx){
   const deadline=Date.now()+12000;
   for(let attempt=0;attempt<2;attempt++){
   if(deadline-Date.now()<3500)break;
-  let allowed;try{allowed=await guard.reserveModelAttempt();}catch(e){return e.code==='PROVIDER_COOLDOWN'?unavailable('provider_rate_limit',{stage:'shared_cooldown',quota:'unknown',retryAfterSeconds:null}):unavailable('provider_budget_unavailable');}if(!allowed)return unavailable('provider_budget_exhausted');
+  let allowed;try{allowed=await guard.reserveModelAttempt();}catch(e){return e.code==='PROVIDER_COOLDOWN'?unavailable('provider_rate_limit',e.diagnostic||{stage:'shared_cooldown',quota:'unknown',retryAfterSeconds:null}):unavailable('provider_budget_unavailable');}if(!allowed)return unavailable('provider_budget_exhausted');
   const remaining=deadline-Date.now();if(remaining<1500)break;
   const res=await fetch(base+'/v1beta/models/'+encodeURIComponent(model)+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({systemInstruction:{parts:[{text:system+(attempt?' Correct any formatting or language error: use the exact JSON schema and requested native script in all three fields.':'')}]},contents:[{role:'user',parts:[{text:JSON.stringify(input)}]}],generationConfig}),redirect:'error',signal:AbortSignal.timeout(Math.min(8000,remaining))});
-  if(res.status===429){const diagnostic=await require('./provider-quota').classify429(res);try{await guard.markModelCooldown(diagnostic.retryAfterSeconds);}catch(_){}return unavailable('provider_rate_limit',diagnostic);}
+  if(res.status===429){const diagnostic=await require('./provider-quota').classify429(res);try{await guard.markModelCooldown(diagnostic.retryAfterSeconds,diagnostic.quota);}catch(_){}return unavailable('provider_rate_limit',diagnostic);}
   if(!res.ok)return unavailable(res.status>=500?'provider_unavailable':'provider_rejected');
   let value=null;try{value=validateResponse(S.parseGemini(await res.json()),ctx);}catch(_){}
   if(value)return {status:200,value};

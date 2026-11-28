@@ -1,9 +1,8 @@
 name: SVASA strict live Gemini evaluation
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['backend/lib/gemini.js', 'frontend/js/intelligence.js', 'tests/ai-contract.test.js', 'tests/production-smoke.js', 'tests/live-ai-pacing.js', '.github/workflows/live-ai-evaluation.yml']
+  # Explicit, on-demand live-provider qualification; consumes project quota.
+  # Automated pushes still run contract, fallback and multilingual release checks.
 permissions:
   contents: read
 concurrency:
