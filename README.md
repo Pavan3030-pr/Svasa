@@ -9,7 +9,7 @@ SVASA turns air-quality forecasts into practical, constraint-aware outdoor decis
 ## Application gallery
 
 <!-- SVASA_GALLERY_START -->
-Actual application UI captured by automated Chromium on commit df3a8f4. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46031117987).
+Actual application UI captured by automated Chromium on commit 38e1c90. **Controlled test data**, not live pollution readings or participant evidence. [Capture workflow](https://github.com/Pavan3030-pr/Svasa/actions/runs/46097517228).
 
 ### Landing experience
 ![SVASA landing page](docs/screenshots/current/landing-desktop.png)
@@ -35,7 +35,12 @@ Actual application UI captured by automated Chromium on commit df3a8f4. **Contro
 
 ### Family Protection
 ![Shared forecast window and family profiles](docs/screenshots/current/family-protection.png)
+![Robust family fairness](docs/screenshots/current/family-fairness.png)
 
+### Indoor air and sustainable travel
+![Indoor PM2.5 scenario comparison](docs/screenshots/current/indoor-intelligence.png)
+![Sustainable travel trade-offs](docs/screenshots/current/sustainable-travel.png)
+ 
 ### Impact Ledger
 ![Saved plans and self-reported completion](docs/screenshots/current/impact-ledger.png)
 
