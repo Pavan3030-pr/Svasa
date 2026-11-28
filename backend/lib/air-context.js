@@ -1,10 +1,8 @@
 'use strict';
 const S=require('../../frontend/js/core.js');
-const cache=new Map(),pending=new Map();
+const cache=new Map(),pool=require('./upstream-pool').createPool(24);
 async function fetchReading(p,key){
- if(pending.has(key))return pending.get(key);
- const promise=(async()=>{const url=new URL(process.env.AIR_CONTEXT_BASE||'https://air-quality-api.open-meteo.com/v1/air-quality');url.search=new URLSearchParams({latitude:String(p.lat),longitude:String(p.lon),timezone:'GMT',forecast_days:'2',current:'us_aqi,pm2_5,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide',hourly:'us_aqi,pm2_5'}).toString();const r=await fetch(url,{signal:AbortSignal.timeout(5000),redirect:'error'});if(!r.ok)throw new Error('Air provider unavailable');return r.json();})();
- pending.set(key,promise);try{return await promise;}finally{if(pending.get(key)===promise)pending.delete(key);}
+ return pool.run(key,async()=>{const url=new URL(process.env.AIR_CONTEXT_BASE||'https://air-quality-api.open-meteo.com/v1/air-quality');url.search=new URLSearchParams({latitude:String(p.lat),longitude:String(p.lon),timezone:'GMT',forecast_days:'2',current:'us_aqi,pm2_5,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,us_aqi_sulphur_dioxide,us_aqi_carbon_monoxide',hourly:'us_aqi,pm2_5'}).toString();const r=await fetch(url,{signal:AbortSignal.timeout(5000),redirect:'error'});if(!r.ok)throw new Error('Air provider unavailable');return r.json();});
 }
 function coordinates(p){
   if(!p||typeof p.lat!=='number'||typeof p.lon!=='number'||!Number.isFinite(p.lat)||!Number.isFinite(p.lon)||Math.abs(p.lat)>90||Math.abs(p.lon)>180)return null;
